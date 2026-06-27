@@ -26,6 +26,10 @@ export function resolveNoteConnectorRepo(): string {
       /* ignore */
     }
   }
+  const defaultRepo = path.join(configDir(), "repo");
+  if (fs.existsSync(path.join(defaultRepo, "src", "note_mcp"))) {
+    return defaultRepo;
+  }
   const here = path.dirname(fileURLToPath(import.meta.url));
   const fromDevLayout = path.resolve(here, "..", "..");
   if (fs.existsSync(path.join(fromDevLayout, "src", "note_mcp"))) {
@@ -37,9 +41,9 @@ export function resolveNoteConnectorRepo(): string {
   }
   throw new Error(
     "note-connector Python 本体が見つかりません。\n"
-      + "  git clone https://github.com/drillan/note-mcp.git\n"
       + "  note-connector config set repoPath /path/to/note-connector\n"
-      + "または NOTE_CONNECTOR_REPO=/path/to/note-connector を設定してください。",
+      + "または NOTE_CONNECTOR_REPO=/path/to/note-connector を設定してください。\n"
+      + "git clone https://github.com/yuga-hashimoto/note-connector.git",
   );
 }
 

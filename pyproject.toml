@@ -1,6 +1,6 @@
 [project]
 name = "note-connector"
-version = "0.2.0"
+version = "0.2.1"
 description = "note-connector: MCP server and ChatGPT connector for note.com"
 readme = "README.md"
 requires-python = ">=3.13"
