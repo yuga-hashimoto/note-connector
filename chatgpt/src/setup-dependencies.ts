@@ -57,12 +57,21 @@ function repoHasPython(root: string): boolean {
 }
 
 function cloneRepo(target: string): void {
+  if (!commandExists("git")) {
+    throw new Error(
+      "git が見つかりません。git をインストールするか、\n" +
+        "手動で clone して repoPath を設定してください。\n" +
+        `  git clone ${DEFAULT_REPO} ${target}\n` +
+        `  note-connector config set repoPath ${target}`,
+    );
+  }
   console.log(`Cloning note-connector → ${target}`);
   fs.mkdirSync(path.dirname(target), { recursive: true });
   execFileSync("git", ["clone", "--depth", "1", DEFAULT_REPO, target], { stdio: "inherit" });
 }
 
 function updateRepo(repo: string): void {
+  if (!commandExists("git")) return;
   try {
     const result = spawnSync("git", ["pull", "--ff-only", "origin", "main"], {
       cwd: repo,
@@ -134,6 +143,11 @@ export async function setupDependencies(): Promise<SetupReport> {
 
   if (!commandExists("tailscale") && config.tunnel.provider === "tailscale" && !config.tunnel.publicUrl) {
     warnings.push("Tailscale CLI がありません。tunnel.publicUrl を設定するか Tailscale をインストールしてください。");
+  }
+  if (!commandExists("git")) {
+    warnings.push(
+      "git がありません。初回起動は動作しますが、更新を自動取得するには git をインストールしてください。",
+    );
   }
 
   return {
