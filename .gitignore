@@ -235,3 +235,6 @@ __marimo__/
 # Local-specific Claude settings and commands (machine-specific)
 .claude/settings.local.json
 .claude/commands/ralph-loop.md
+
+chatgpt/node_modules/
+chatgpt/dist/

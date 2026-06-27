@@ -1,0 +1,45 @@
+{
+  "name": "note-connector",
+  "version": "0.2.0",
+  "publishConfig": {
+    "access": "public"
+  },
+  "description": "note-connector — ChatGPT connector for note.com (MCP + Apps SDK UI)",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "note-connector": "dist/bin.js"
+  },
+  "files": [
+    "dist/**",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20.10"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test dist/net.test.js dist/version.test.js dist/config.test.js",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "commander": "^13.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  },
+  "keywords": [
+    "chatgpt",
+    "mcp",
+    "note.com",
+    "note-connector",
+    "apps-sdk"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/drillan/note-mcp.git"
+  },
+  "homepage": "https://github.com/drillan/note-mcp#readme"
+}

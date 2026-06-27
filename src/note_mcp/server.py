@@ -775,6 +775,50 @@ async def note_delete_all_drafts(
         return f"一括削除に失敗しました: {e.message}"
 
 
+
+
+@mcp.tool(annotations={"readOnlyHint": True})
+async def note_search_public_articles(
+    query: Annotated[str, "検索キーワード"],
+    size: Annotated[int, "件数（1〜20）"] = 10,
+) -> str:
+    """note.com の公開記事をキーワード検索します（他人の記事・ログイン不要）。"""
+    from note_mcp.api.public_notes import search_public_notes
+
+    try:
+        result = await search_public_notes(query, size=size)
+    except NoteAPIError as e:
+        return f"検索に失敗しました: {e}"
+    if not result.items:
+        return f"「{query}」に一致する公開記事は見つかりませんでした。"
+    lines = [f"検索結果（{len(result.items)}件）クエリ: {query}"]
+    for item in result.items:
+        lines.append(f"  - {item.title} ({item.url}) 著者: {item.author_username}")
+    return "\n".join(lines)
+
+
+@mcp.tool(annotations={"readOnlyHint": True})
+async def note_fetch_public_article(
+    note_key_or_url: Annotated[str, "記事キー（n...）または https://note.com/.../n/... URL"],
+) -> str:
+    """公開記事の本文を取得します（他人の記事・ログイン不要）。"""
+    from note_mcp.api.public_notes import fetch_public_article
+
+    try:
+        article = await fetch_public_article(note_key_or_url)
+    except NoteAPIError as e:
+        return f"取得に失敗しました: {e}"
+    preview = article.body_markdown[:2000]
+    if len(article.body_markdown) > 2000:
+        preview += "\n...（省略）"
+    return (
+        f"タイトル: {article.title}\n"
+        f"著者: {article.author_username}\n"
+        f"URL: {article.url}\n"
+        f"ステータス: {article.status}\n\n"
+        f"{preview}"
+    )
+
 # Register investigator tools if in investigator mode
 if os.environ.get("INVESTIGATOR_MODE") == "1":
     register_investigator_tools(mcp)

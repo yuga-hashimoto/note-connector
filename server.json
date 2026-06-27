@@ -1,0 +1,20 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.json",
+  "name": "io.github.drillan/note-connector",
+  "description": "ChatGPT connector and MCP server for note.com: drafts, publish, images, Apps SDK UI.",
+  "repository": {
+    "url": "https://github.com/drillan/note-mcp",
+    "source": "github"
+  },
+  "version": "0.2.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "note-connector",
+      "version": "0.2.0",
+      "transport": {
+        "type": "streamable-http"
+      }
+    }
+  ]
+}

@@ -44,3 +44,27 @@ jobs:
 
       - name: Run contract tests
         run: uv run pytest tests/contract -v --tb=short
+
+
+  chatgpt-npm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: chatgpt/package-lock.json
+
+      - name: Install chatgpt deps
+        working-directory: chatgpt
+        run: npm ci
+
+      - name: Build
+        working-directory: chatgpt
+        run: npm run build
+
+      - name: Test
+        working-directory: chatgpt
+        run: npm test

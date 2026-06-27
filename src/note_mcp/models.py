@@ -414,6 +414,37 @@ class DeleteDraftInput(BaseModel):
     confirm: bool = False
 
 
+class PublicArticleSummary(BaseModel):
+    """Summary of a public note.com article in search results."""
+
+    key: str
+    title: str
+    author_username: str
+    author_nickname: str | None = None
+    url: str
+    published_at: str | None = None
+
+
+class PublicSearchResult(BaseModel):
+    """Public note search results."""
+
+    items: list[PublicArticleSummary]
+    query: str
+    is_last_page: bool | None = None
+
+
+class PublicArticle(BaseModel):
+    """A fetched public note.com article."""
+
+    key: str
+    title: str
+    body_markdown: str
+    author_username: str
+    author_nickname: str | None = None
+    url: str
+    status: str
+
+
 class DeleteAllDraftsInput(BaseModel):
     """Input for note_delete_all_drafts MCP tool.
 
