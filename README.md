@@ -1,7 +1,7 @@
 # note-connector
 
 **ChatGPT 用**の [note.com](https://note.com) **Connector**（MCP + Apps SDK UI）。  
-下書き作成・公開・画像挿入・**他人の公開記事の検索・取得**まで、ChatGPT の開発者モードから使えます。
+下書き作成・公開・画像挿入・URLカード埋め込み・削除・下書き戻し・**他人の公開記事の検索・取得**まで、ChatGPT の開発者モードから使えます。
 
 ⚠️ **非公式** — note.com とは無関係です。[DISCLAIMER.md](DISCLAIMER.md)
 
@@ -70,11 +70,16 @@ Tailscale Funnel または [ngrok 固定ドメイン](docs/development/release.m
 | ツール | 説明 |
 |--------|------|
 | `note_login` / `note_check_auth` | note.com ログイン・認証確認 |
-| `note_create_draft` / `note_publish_article` | 下書き・公開 |
+| `note_create_draft` / `note_publish_article` | 下書き作成・公開（`tags` でタグ指定可） |
+| `note_update_article` | 記事の内容・タイトル・タグ更新 |
+| `note_delete_draft` / `note_delete_article` | 下書き削除 / 公開記事も削除可 |
+| `note_unpublish_article` | 公開記事を下書きに戻す |
+| `note_upload_eyecatch` | サムネイル（アイキャッチ画像）登録 |
 | `note_attach_image` / `note_create_draft_with_images` | ChatGPT 生成画像の投稿 |
 | `note_ui_status` / `note_ui_list_articles` | Apps SDK ウィジェット |
-| `note_search_public_articles` | **他人の公開記事**をキーワード検索 |
+| `note_search_public_articles` | 他人の公開記事をキーワード検索 |
 | `note_fetch_public_article` | 公開 URL またはキーで記事取得 |
+| URL カード | 任意の URL を単独行に貼るとOGPカード化 |
 
 ---
 
