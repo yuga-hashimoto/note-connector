@@ -12,6 +12,7 @@ import { isNoteAuthenticated, startNoteLoginInBackground } from "./note-auth.js"
 import { TunnelManager } from "./tunnel/manager.js";
 import { saveRuntime, cliPidPath, loadLastMcpAccess } from "./daemon-state.js";
 import type { StartOptions } from "./runtime.js";
+import { buildRoutedMcpEndpoint, ensureSharedRouterRoute } from "./shared-router.js";
 
 async function verifyHealth(port: number): Promise<boolean> {
   try {
@@ -63,12 +64,26 @@ export async function runDaemonWorker(opts: StartOptions, logFile: string): Prom
   }
 
   if (!opts.noTunnel) {
-    await tunnel.start(port, config.tunnel);
+    if (config.tunnel.provider === "tailscale" && (config.tunnel.domain || config.tunnel.publicUrl)) {
+      await ensureSharedRouterRoute({
+        name: "note-connector",
+        prefix: "/note-connector",
+        target: `http://127.0.0.1:${port}`,
+        publicBaseUrl: config.tunnel.publicUrl || `https://${config.tunnel.domain}`,
+      });
+    } else {
+      await tunnel.start(port, config.tunnel);
+    }
   }
 
   const t = tunnel.current();
   const localUrl = buildMcpEndpoint(`http://127.0.0.1:${port}`, token);
-  const publicUrl = t.url ? buildMcpEndpoint(t.url, token) : localUrl;
+  const publicUrl =
+    config.tunnel.provider === "tailscale" && (config.tunnel.domain || config.tunnel.publicUrl) && !opts.noTunnel
+      ? buildRoutedMcpEndpoint(config.tunnel.publicUrl || `https://${config.tunnel.domain}`, "/note-connector", token)
+      : t.url
+        ? buildMcpEndpoint(t.url, token)
+        : localUrl;
 
   saveRuntime({
     cliPid: process.pid,
@@ -77,7 +92,10 @@ export async function runDaemonWorker(opts: StartOptions, logFile: string): Prom
     localMcpUrl: localUrl,
     startedAt,
     logFile,
-    tunnelProvider: t.provider,
+    tunnelProvider:
+      config.tunnel.provider === "tailscale" && (config.tunnel.domain || config.tunnel.publicUrl) && !opts.noTunnel
+        ? "tailscale-shared-router"
+        : t.provider,
   });
 
   if (!isNoteAuthenticated() && !opts.skipNoteLogin) {

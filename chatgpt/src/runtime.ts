@@ -10,6 +10,7 @@ import { isNoteAuthenticated, startNoteLoginInBackground } from "./note-auth.js"
 import { spawnDaemon } from "./daemon.js";
 import { setupDependencies } from "./setup-dependencies.js";
 import { TunnelManager } from "./tunnel/manager.js";
+import { buildRoutedMcpEndpoint, ensureSharedRouterRoute } from "./shared-router.js";
 
 export interface StartOptions {
   noTunnel?: boolean;
@@ -107,7 +108,19 @@ export async function runStartForeground(opts: StartOptions): Promise<void> {
   }
 
   if (!opts.noTunnel) {
-    const info = await tunnel.start(port, config.tunnel);
+    const info =
+      config.tunnel.provider === "tailscale" && (config.tunnel.domain || config.tunnel.publicUrl)
+        ? await (async () => {
+            const publicBaseUrl = config.tunnel.publicUrl || `https://${config.tunnel.domain}`;
+            const route = await ensureSharedRouterRoute({
+              name: "note-connector",
+              prefix: "/note-connector",
+              target: `http://127.0.0.1:${port}`,
+              publicBaseUrl,
+            });
+            return { provider: "tailscale-shared-router", url: route.publicBaseUrl, status: "running" as const };
+          })()
+        : await tunnel.start(port, config.tunnel);
     if (info.url) {
       try {
         tunnelHost = new URL(info.url).host;
@@ -123,13 +136,18 @@ export async function runStartForeground(opts: StartOptions): Promise<void> {
   const token = fs.readFileSync(tokenFile, "utf8").trim();
   const localUrl = buildMcpEndpoint(`http://127.0.0.1:${port}`, token);
   const t = tunnel.current();
-  const publicUrl = t.url ? buildMcpEndpoint(t.url, token) : localUrl;
+  const publicUrl =
+    config.tunnel.provider === "tailscale" && (config.tunnel.domain || config.tunnel.publicUrl) && !opts.noTunnel
+      ? buildRoutedMcpEndpoint(config.tunnel.publicUrl || `https://${config.tunnel.domain}`, "/note-connector", token)
+      : t.url
+        ? buildMcpEndpoint(t.url, token)
+        : localUrl;
 
   console.log("");
   console.log("note-connector is running");
   console.log(`Local MCP: ${localUrl}`);
 
-  if (t.url) {
+  if (publicUrl !== localUrl) {
     console.log(`Public MCP: ${publicUrl}`);
   } else if (t.error) {
     console.log(`Tunnel: ${t.error}`);
