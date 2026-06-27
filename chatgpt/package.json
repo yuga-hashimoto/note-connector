@@ -39,7 +39,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/drillan/note-mcp.git"
+    "url": "git+https://github.com/yuga-hashimoto/note-connector.git"
   },
-  "homepage": "https://github.com/drillan/note-mcp#readme"
+  "homepage": "https://github.com/yuga-hashimoto/note-connector#readme"
 }
