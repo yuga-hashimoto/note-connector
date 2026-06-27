@@ -677,64 +677,6 @@ def _validate_image_bytes(data: bytes, mime_type: str) -> None:
             )
 
 
-async def upload_eyecatch_base64(
-    session: Session,
-    note_id: str,
-    mime_type: str,
-    image_base64: str,
-) -> Image:
-    """Upload an eyecatch image from base64-encoded data.
-
-    Decodes base64 image data, validates it, writes to a temporary file,
-    and uploads via the standard image upload flow. The temporary file is
-    cleaned up after upload (success or failure).
-
-    Args:
-        session: Authenticated session
-        note_id: The note ID to associate the image with (numeric or key format)
-        mime_type: MIME type of the image (e.g., "image/png")
-        image_base64: Base64-encoded image data (with or without data URL prefix)
-
-    Returns:
-        Image object with upload result
-
-    Raises:
-        NoteAPIError: If validation fails or API request fails
-    """
-    # Step 1: Validate MIME type
-    _validate_mime_type(mime_type)
-
-    # Step 2: Decode base64
-    image_bytes = _decode_base64_image(image_base64)
-
-    # Step 3: Validate image bytes
-    _validate_image_bytes(image_bytes, mime_type)
-
-    # Step 4: Determine file extension
-    extension = MIME_TO_EXTENSION.get(mime_type, ".bin")
-
-    # Step 5: Write to temp file and upload
-    tmp_path: str | None = None
-    try:
-        fd, tmp_path = tempfile.mkstemp(suffix=extension)
-        os.close(fd)
-
-        with open(tmp_path, "wb") as f:
-            f.write(image_bytes)
-
-        image = await _upload_image_internal(
-            session=session,
-            file_path=tmp_path,
-            note_id=note_id,
-            image_type=ImageType.EYECATCH,
-        )
-        return image
-    finally:
-        if tmp_path is not None:
-            with contextlib.suppress(OSError):
-                os.unlink(tmp_path)
-
-
 # =============================================================================
 # Chunked Base64 Image Upload
 # =============================================================================
