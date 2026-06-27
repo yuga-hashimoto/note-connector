@@ -244,6 +244,17 @@ async def _upload_image_internal(
     async with NoteAPIClient(session) as client:
         response = await client.post(endpoint, files=files, data=data)
 
+    # Check for API-level error response
+    if "error" in response and not response.get("data"):
+        error_message = response.get("error", "unknown error")
+        if isinstance(error_message, dict):
+            error_message = error_message.get("message", str(error_message))
+        raise NoteAPIError(
+            code=ErrorCode.UPLOAD_FAILED,
+            message=f"画像アップロードに失敗しました: {error_message}",
+            details={"note_id": numeric_note_id, "response": response},
+        )
+
     # Debug: log full API response for investigation
     logger.debug(
         "Image upload response for note_id=%s, endpoint=%s: %s",
