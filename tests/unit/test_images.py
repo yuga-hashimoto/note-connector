@@ -449,14 +449,18 @@ class TestImageUploadArticle6Compliance:
             assert result.key is None  # eyecatch API doesn't return key
 
     @pytest.mark.asyncio
-    async def test_upload_image_raises_on_missing_url(self, tmp_path: Path) -> None:
-        """Eyecatch upload should raise error when API response is missing 'url'."""
+    async def test_upload_image_succeeds_without_url(self, tmp_path: Path) -> None:
+        """Eyecatch upload should succeed even when API response is missing 'url'.
+
+        URL is now optional - the eyecatch may be set server-side
+        without returning a URL in the API response.
+        """
         session = create_mock_session()
         file_path = tmp_path / "test.jpg"
         file_path.write_bytes(b"\xff\xd8\xff" + b"x" * 100)
 
         # Response missing 'url' field
-        mock_response = {
+        mock_response: dict[str, dict[str, str]] = {
             "data": {
                 "key": "img_123456",
             }
@@ -469,15 +473,18 @@ class TestImageUploadArticle6Compliance:
             mock_client.__aexit__ = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
 
-            with pytest.raises(NoteAPIError) as exc_info:
-                await upload_eyecatch_image(session, str(file_path), note_id="12345")
+            result = await upload_eyecatch_image(session, str(file_path), note_id="12345")
 
-            assert exc_info.value.code == ErrorCode.API_ERROR
-            assert "url" in exc_info.value.message.lower()
+            assert result.key == "img_123456"
+            assert result.url == ""  # URL is optional, may be empty
 
     @pytest.mark.asyncio
-    async def test_upload_image_raises_on_empty_data(self, tmp_path: Path) -> None:
-        """Eyecatch upload should raise error when API response data is empty."""
+    async def test_upload_image_succeeds_with_empty_data(self, tmp_path: Path) -> None:
+        """Eyecatch upload should succeed when API response data is empty.
+
+        URL is now optional - the eyecatch may be set server-side
+        without returning image metadata.
+        """
         session = create_mock_session()
         file_path = tmp_path / "test.jpg"
         file_path.write_bytes(b"\xff\xd8\xff" + b"x" * 100)
@@ -492,10 +499,10 @@ class TestImageUploadArticle6Compliance:
             mock_client.__aexit__ = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
 
-            with pytest.raises(NoteAPIError) as exc_info:
-                await upload_eyecatch_image(session, str(file_path), note_id="12345")
+            result = await upload_eyecatch_image(session, str(file_path), note_id="12345")
 
-            assert exc_info.value.code == ErrorCode.API_ERROR
+            assert result.key is None
+            assert result.url == ""  # URL is optional, may be empty
 
 
 class TestUploadBodyImageArticle6Compliance:
