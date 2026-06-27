@@ -18,6 +18,7 @@ from note_mcp.api.images import (
     _validate_image_bytes,
     _validate_mime_type,
     upload_eyecatch_base64,
+    upload_eyecatch_chunked,
 )
 from note_mcp.models import ErrorCode, NoteAPIError, Session
 
@@ -745,6 +746,381 @@ class TestUploadEyecatchBase64:
                     image_base64=b64,
                 )
             assert exc_info.value.code == ErrorCode.API_ERROR
+
+
+# =============================================================================
+# upload_eyecatch_chunked
+# =============================================================================
+
+
+class TestUploadEyecatchChunked:
+    """Tests for upload_eyecatch_chunked function."""
+
+    @pytest.fixture(autouse=True)
+    def _clean_chunk_buffer(self) -> None:
+        """Clean up chunk buffer before each test."""
+        import note_mcp.api.images as img_mod
+
+        img_mod._chunk_buffer.clear()
+
+    @pytest.mark.asyncio
+    async def test_single_chunk(self) -> None:
+        """Single chunk upload should succeed."""
+        from note_mcp.models import Image, ImageType
+
+        session = _create_mock_session()
+        raw = _create_test_png_bytes()
+        b64 = base64.b64encode(raw).decode("ascii")
+
+        mock_image = Image(
+            key=None,
+            url="https://example.com/upload/test.png",
+            original_path="/tmp/test.png",
+            uploaded_at=1234567890,
+            image_type=ImageType.EYECATCH,
+        )
+
+        with patch("note_mcp.api.images._upload_image_internal") as mock_upload:
+            mock_upload.return_value = mock_image
+
+            result = await upload_eyecatch_chunked(
+                session=session,
+                upload_id="test-uuid-1",
+                note_id="123456",
+                mime_type="image/png",
+                chunk=b64,
+                chunk_index=0,
+                total_chunks=1,
+            )
+
+        assert result is not None
+        assert result.url == mock_image.url
+
+    @pytest.mark.asyncio
+    async def test_two_chunks(self) -> None:
+        """Two-chunk upload should assemble and succeed."""
+        from note_mcp.models import Image, ImageType
+
+        session = _create_mock_session()
+        raw = _create_test_png_bytes()
+        b64 = base64.b64encode(raw).decode("ascii")
+
+        # Split into two chunks
+        mid = len(b64) // 2
+        chunk1 = b64[:mid]
+        chunk2 = b64[mid:]
+
+        mock_image = Image(
+            key=None,
+            url="https://example.com/upload/test.png",
+            original_path="/tmp/test.png",
+            uploaded_at=1234567890,
+            image_type=ImageType.EYECATCH,
+        )
+
+        with patch("note_mcp.api.images._upload_image_internal") as mock_upload:
+            mock_upload.return_value = mock_image
+
+            # First chunk - should return None
+            result1 = await upload_eyecatch_chunked(
+                session=session,
+                upload_id="test-uuid-2",
+                note_id="123456",
+                mime_type="image/png",
+                chunk=chunk1,
+                chunk_index=0,
+                total_chunks=2,
+            )
+            assert result1 is None
+
+            # Second chunk - should assemble and upload
+            result2 = await upload_eyecatch_chunked(
+                session=session,
+                upload_id="test-uuid-2",
+                note_id="123456",
+                mime_type="image/png",
+                chunk=chunk2,
+                chunk_index=1,
+                total_chunks=2,
+            )
+            assert result2 is not None
+            assert result2.url == mock_image.url
+
+    @pytest.mark.asyncio
+    async def test_three_chunks_out_of_order(self) -> None:
+        """Out-of-order chunks should still assemble correctly."""
+        from note_mcp.models import Image, ImageType
+
+        session = _create_mock_session()
+        raw = _create_test_png_bytes(width=20, height=20)
+        b64 = base64.b64encode(raw).decode("ascii")
+
+        chunk_size = len(b64) // 3
+        chunks = [b64[i : i + chunk_size] for i in range(0, len(b64), chunk_size)]
+
+        mock_image = Image(
+            key=None,
+            url="https://example.com/upload/test.png",
+            original_path="/tmp/test.png",
+            uploaded_at=1234567890,
+            image_type=ImageType.EYECATCH,
+        )
+
+        with patch("note_mcp.api.images._upload_image_internal") as mock_upload:
+            mock_upload.return_value = mock_image
+
+            # Send in reverse order
+            await upload_eyecatch_chunked(
+                session=session,
+                upload_id="test-uuid-3",
+                note_id="123456",
+                mime_type="image/png",
+                chunk=chunks[2],
+                chunk_index=2,
+                total_chunks=3,
+            )
+            await upload_eyecatch_chunked(
+                session=session,
+                upload_id="test-uuid-3",
+                note_id="123456",
+                mime_type="image/png",
+                chunk=chunks[1],
+                chunk_index=1,
+                total_chunks=3,
+            )
+            result = await upload_eyecatch_chunked(
+                session=session,
+                upload_id="test-uuid-3",
+                note_id="123456",
+                mime_type="image/png",
+                chunk=chunks[0],
+                chunk_index=0,
+                total_chunks=3,
+            )
+
+        assert result is not None
+        assert result.url == mock_image.url
+
+    @pytest.mark.asyncio
+    async def test_chunk_index_out_of_range(self) -> None:
+        """Negative chunk_index should raise error."""
+        session = _create_mock_session()
+
+        with pytest.raises(NoteAPIError) as exc_info:
+            await upload_eyecatch_chunked(
+                session=session,
+                upload_id="test-uuid-4",
+                note_id="123456",
+                mime_type="image/png",
+                chunk="AAAA",
+                chunk_index=-1,
+                total_chunks=2,
+            )
+        assert exc_info.value.code == ErrorCode.INVALID_INPUT
+
+    @pytest.mark.asyncio
+    async def test_chunk_index_exceeds_total(self) -> None:
+        """chunk_index >= total_chunks should raise error."""
+        session = _create_mock_session()
+
+        with pytest.raises(NoteAPIError) as exc_info:
+            await upload_eyecatch_chunked(
+                session=session,
+                upload_id="test-uuid-5",
+                note_id="123456",
+                mime_type="image/png",
+                chunk="AAAA",
+                chunk_index=2,
+                total_chunks=2,
+            )
+        assert exc_info.value.code == ErrorCode.INVALID_INPUT
+
+    @pytest.mark.asyncio
+    async def test_total_chunks_inconsistent(self) -> None:
+        """Changing total_chunks between calls should raise error."""
+        session = _create_mock_session()
+        raw = _create_test_png_bytes()
+        b64 = base64.b64encode(raw).decode("ascii")
+
+        # First call with total_chunks=2
+        await upload_eyecatch_chunked(
+            session=session,
+            upload_id="test-uuid-6",
+            note_id="123456",
+            mime_type="image/png",
+            chunk=b64[:10],
+            chunk_index=0,
+            total_chunks=2,
+        )
+
+        # Second call with total_chunks=3 should fail
+        with pytest.raises(NoteAPIError) as exc_info:
+            await upload_eyecatch_chunked(
+                session=session,
+                upload_id="test-uuid-6",
+                note_id="123456",
+                mime_type="image/png",
+                chunk=b64[10:],
+                chunk_index=1,
+                total_chunks=3,
+            )
+        assert exc_info.value.code == ErrorCode.INVALID_INPUT
+
+    @pytest.mark.asyncio
+    async def test_empty_upload_id(self) -> None:
+        """Empty upload_id should raise error."""
+        session = _create_mock_session()
+
+        with pytest.raises(NoteAPIError) as exc_info:
+            await upload_eyecatch_chunked(
+                session=session,
+                upload_id="  ",
+                note_id="123456",
+                mime_type="image/png",
+                chunk="AAAA",
+                chunk_index=0,
+                total_chunks=1,
+            )
+        assert exc_info.value.code == ErrorCode.INVALID_INPUT
+
+    @pytest.mark.asyncio
+    async def test_empty_chunk(self) -> None:
+        """Empty chunk should raise error."""
+        session = _create_mock_session()
+
+        with pytest.raises(NoteAPIError) as exc_info:
+            await upload_eyecatch_chunked(
+                session=session,
+                upload_id="test-uuid-7",
+                note_id="123456",
+                mime_type="image/png",
+                chunk="  ",
+                chunk_index=0,
+                total_chunks=2,
+            )
+        assert exc_info.value.code == ErrorCode.INVALID_BASE64
+
+    @pytest.mark.asyncio
+    async def test_state_cleaned_after_success(self) -> None:
+        """Chunk buffer state should be cleaned after successful upload."""
+        import note_mcp.api.images as img_mod
+        from note_mcp.models import Image, ImageType
+
+        session = _create_mock_session()
+        raw = _create_test_png_bytes()
+        b64 = base64.b64encode(raw).decode("ascii")
+
+        mock_image = Image(
+            key=None,
+            url="https://example.com/upload/test.png",
+            original_path="/tmp/test.png",
+            uploaded_at=1234567890,
+            image_type=ImageType.EYECATCH,
+        )
+
+        with patch("note_mcp.api.images._upload_image_internal") as mock_upload:
+            mock_upload.return_value = mock_image
+
+            result = await upload_eyecatch_chunked(
+                session=session,
+                upload_id="test-uuid-clean",
+                note_id="123456",
+                mime_type="image/png",
+                chunk=b64,
+                chunk_index=0,
+                total_chunks=1,
+            )
+
+        assert result is not None
+        assert "test-uuid-clean" not in img_mod._chunk_buffer
+
+    @pytest.mark.asyncio
+    async def test_state_cleaned_after_error(self) -> None:
+        """Chunk buffer state should be cleaned even on upload failure."""
+        import note_mcp.api.images as img_mod
+
+        session = _create_mock_session()
+        raw = _create_test_png_bytes()
+        b64 = base64.b64encode(raw).decode("ascii")
+
+        with patch("note_mcp.api.images._upload_image_internal") as mock_upload:
+            mock_upload.side_effect = NoteAPIError(
+                code=ErrorCode.API_ERROR,
+                message="Upload failed",
+            )
+
+            with pytest.raises(NoteAPIError):
+                await upload_eyecatch_chunked(
+                    session=session,
+                    upload_id="test-uuid-err",
+                    note_id="123456",
+                    mime_type="image/png",
+                    chunk=b64,
+                    chunk_index=0,
+                    total_chunks=1,
+                )
+
+        assert "test-uuid-err" not in img_mod._chunk_buffer
+
+    @pytest.mark.asyncio
+    async def test_intermediate_returns_none(self) -> None:
+        """Intermediate chunk should return None."""
+        session = _create_mock_session()
+        raw = _create_test_png_bytes()
+        b64 = base64.b64encode(raw).decode("ascii")
+
+        mid = len(b64) // 2
+        result = await upload_eyecatch_chunked(
+            session=session,
+            upload_id="test-uuid-mid",
+            note_id="123456",
+            mime_type="image/png",
+            chunk=b64[:mid],
+            chunk_index=0,
+            total_chunks=2,
+        )
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_unsupported_mime_chunked(self) -> None:
+        """Unsupported MIME type should raise on first chunk."""
+        session = _create_mock_session()
+
+        with pytest.raises(NoteAPIError) as exc_info:
+            await upload_eyecatch_chunked(
+                session=session,
+                upload_id="test-uuid-mime",
+                note_id="123456",
+                mime_type="image/bmp",
+                chunk="AAAA",
+                chunk_index=0,
+                total_chunks=1,
+            )
+        assert exc_info.value.code == ErrorCode.UNSUPPORTED_MIME_TYPE
+
+    @pytest.mark.asyncio
+    async def test_size_too_large_after_assembly(self) -> None:
+        """Size check should happen after assembly."""
+        from note_mcp.api import images
+
+        session = _create_mock_session()
+
+        # Create a known-size payload
+        data = _create_test_png_bytes(width=2, height=2)
+        b64 = base64.b64encode(data).decode("ascii")
+
+        with patch.object(images, "MAX_FILE_SIZE", 5):
+            with pytest.raises(NoteAPIError) as exc_info:
+                await upload_eyecatch_chunked(
+                    session=session,
+                    upload_id="test-uuid-big",
+                    note_id="123456",
+                    mime_type="image/png",
+                    chunk=b64,
+                    chunk_index=0,
+                    total_chunks=1,
+                )
+            assert exc_info.value.code == ErrorCode.IMAGE_TOO_LARGE
 
 
 def tempfile_dir() -> str:

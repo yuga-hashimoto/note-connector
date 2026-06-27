@@ -26,6 +26,7 @@ from note_mcp.api.images import (
     insert_image_via_api,
     upload_body_image,
     upload_eyecatch_base64,
+    upload_eyecatch_chunked,
     upload_eyecatch_image,
 )
 from note_mcp.api.preview import get_preview_html
@@ -321,6 +322,63 @@ async def note_set_eyecatch_base64(
         mime_type=mime_type,
         image_base64=image_base64,
     )
+    if image.url:
+        return f"アイキャッチ画像を設定しました。URL: {image.url}"
+    return "アイキャッチ画像を設定しました。"
+
+
+@mcp.tool()
+@require_session
+@handle_api_error
+async def note_set_eyecatch_base64_chunked(
+    session: Session,
+    upload_id: Annotated[str, "アップロードセッションを識別する一意なID（UUID推奨）"],
+    note_id: Annotated[str, "アイキャッチ画像を設定する記事のID（数値IDまたは記事キー n... 形式）"],
+    mime_type: Annotated[str, "画像のMIMEタイプ（image/png, image/jpeg, image/webp など）"],
+    chunk: Annotated[str, "base64エンコードされた画像データのチャンク"],
+    chunk_index: Annotated[int, "このチャンクの0ベースのインデックス"],
+    total_chunks: Annotated[int, "全チャンク数"],
+) -> str:
+    """base64画像を分割（チャンク）で送信し、アイキャッチ画像を設定します。
+
+    大きなbase64画像をChatGPT経由で安全に転送するためのツールです。
+    base64文字列を複数チャンクに分割して順次送信し、全チャンクが
+    揃った時点で画像を組み立ててnote.comにアップロードします。
+
+    使い方:
+    1. ChatGPT側でbase64を分割（例: 50KBずつ）
+    2. upload_id（UUID）を生成
+    3. 各チャンクを note_set_eyecatch_base64_chunked で送信
+    4. 全チャンク送信後、自動的に画像が組み立てられアップロードされる
+
+    対応形式: PNG, JPEG, WebP, GIF
+    最大合計サイズ: 10MB
+    1チャンクあたり推奨サイズ: 64KB以下
+
+    Args:
+        upload_id: アップロードセッションの一意なID
+        note_id: アイキャッチ画像を設定する記事のID
+        mime_type: 画像のMIMEタイプ
+        chunk: base64エンコードされたチャンクデータ
+        chunk_index: このチャンクのインデックス（0始まり）
+        total_chunks: 全チャンク数
+
+    Returns:
+        中間チャンクでは受信状況、最終チャンクでは設定結果
+    """
+    image = await upload_eyecatch_chunked(
+        session=session,
+        upload_id=upload_id,
+        note_id=note_id,
+        mime_type=mime_type,
+        chunk=chunk,
+        chunk_index=chunk_index,
+        total_chunks=total_chunks,
+    )
+
+    if image is None:
+        return f"チャンク {chunk_index + 1}/{total_chunks} を受信しました。 upload_id: {upload_id}"
+
     if image.url:
         return f"アイキャッチ画像を設定しました。URL: {image.url}"
     return "アイキャッチ画像を設定しました。"

@@ -480,6 +480,36 @@ class TestToolSchemas:
             f"missing={expected_required - actual_required}"
         )
 
+    def test_note_set_eyecatch_base64_chunked_tool_exists(self) -> None:
+        """Test that note_set_eyecatch_base64_chunked tool is registered."""
+        tools = get_tools()
+        assert "note_set_eyecatch_base64_chunked" in tools
+
+    def test_note_set_eyecatch_base64_chunked_schema(self) -> None:
+        """Test note_set_eyecatch_base64_chunked tool schema matches exactly."""
+        tools = get_tools()
+        set_tool = tools["note_set_eyecatch_base64_chunked"]
+
+        assert set_tool.parameters is not None
+        schema = set_tool.parameters
+        assert "properties" in schema
+
+        expected_properties = {"upload_id", "note_id", "mime_type", "chunk", "chunk_index", "total_chunks"}
+        actual_properties = set(schema.get("properties", {}).keys())
+        assert actual_properties == expected_properties, (
+            f"Schema mismatch: "
+            f"extra={actual_properties - expected_properties}, "
+            f"missing={expected_properties - actual_properties}"
+        )
+
+        expected_required = {"upload_id", "note_id", "mime_type", "chunk", "chunk_index", "total_chunks"}
+        actual_required = set(schema.get("required", []))
+        assert actual_required == expected_required, (
+            f"Required mismatch: "
+            f"extra={actual_required - expected_required}, "
+            f"missing={expected_required - actual_required}"
+        )
+
 
 class TestToolDescriptions:
     """Tests for tool descriptions."""
@@ -549,6 +579,7 @@ class TestRequireSessionTools:
         "note_upload_eyecatch",
         "note_upload_body_image",
         "note_set_eyecatch_base64",
+        "note_set_eyecatch_base64_chunked",
         "note_show_preview",
         "note_get_preview_html",
     ]
