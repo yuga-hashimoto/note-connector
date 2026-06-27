@@ -11,7 +11,7 @@ import { discoverTailscaleFqdn } from "./tunnel/tailscale.js";
 import { isNoteAuthenticated, startNoteLoginInBackground } from "./note-auth.js";
 import { TunnelManager } from "./tunnel/manager.js";
 import { saveRuntime, cliPidPath, loadLastMcpAccess } from "./daemon-state.js";
-import { ensureInitialized, type StartOptions } from "./runtime.js";
+import type { StartOptions } from "./runtime.js";
 
 async function verifyHealth(port: number): Promise<boolean> {
   try {
@@ -38,7 +38,6 @@ function watchFirstChatGptAccess(sinceIso: string, logFile: string): void {
 }
 
 export async function runDaemonWorker(opts: StartOptions, logFile: string): Promise<void> {
-  await ensureInitialized();
   const startedAt = new Date().toISOString();
   fs.writeFileSync(cliPidPath(), String(process.pid));
 

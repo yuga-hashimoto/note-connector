@@ -1,13 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
 import { buildMcpEndpoint, loadConfig, loadOrCreateToken, saveConfig } from "./config.js";
-import { ensureConfigDir, configDir } from "./paths.js";
+import { configDir } from "./paths.js";
 import { startPythonServer } from "./spawn-python.js";
 import { resolveGatewayPort } from "./net.js";
 import { discoverTailscaleFqdn } from "./tunnel/tailscale.js";
 import { runOnboarding } from "./onboarding.js";
 import { isNoteAuthenticated, startNoteLoginInBackground } from "./note-auth.js";
 import { spawnDaemon } from "./daemon.js";
+import { setupDependencies } from "./setup-dependencies.js";
 import { TunnelManager } from "./tunnel/manager.js";
 
 export interface StartOptions {
@@ -27,42 +28,47 @@ async function verifyHealth(port: number): Promise<boolean> {
   }
 }
 
-/** Create config + token + optional Tailscale domain (runs on every start, idempotent). */
-export async function ensureInitialized(): Promise<void> {
-  const firstRun = !fs.existsSync(path.join(configDir(), "config.json"));
-  ensureConfigDir();
-  let config = loadConfig();
-  const fqdn = discoverTailscaleFqdn();
-  if (fqdn && !config.tunnel.domain) {
-    config = { ...config, tunnel: { ...config.tunnel, domain: fqdn } };
-    saveConfig(config);
-    if (firstRun) {
-      console.log(`Tailscale FQDN saved: ${fqdn}`);
-    }
-  } else {
-    saveConfig(config);
-  }
-  loadOrCreateToken();
-  if (firstRun) {
-    console.log(`Ready (~/.note-connector). Starting…`);
-  }
-}
-
 /** @deprecated Use `note-connector` or `note-connector start` */
 export async function runSetup(): Promise<void> {
-  await ensureInitialized();
   console.log("Setup is included in start. Just run: note-connector");
 }
 
 export async function runStart(opts: StartOptions): Promise<void> {
-  await ensureInitialized();
+  console.log("note-connector — ChatGPT Connector セットアップ中…");
+  const report = await setupDependencies();
+  for (const w of report.warnings) {
+    console.warn(`⚠ ${w}`);
+  }
+  loadOrCreateToken();
+  const fqdn = discoverTailscaleFqdn();
+  if (fqdn) {
+    const config = loadConfig();
+    if (!config.tunnel.domain) {
+      saveConfig({ ...config, tunnel: { ...config.tunnel, domain: fqdn } });
+      console.log(`Tailscale FQDN: ${fqdn}`);
+    }
+  }
+  console.log("依存関係の準備が完了しました。");
   await spawnDaemon(opts);
-  return;
 }
 
 /** Foreground mode (debug): keep terminal attached. */
 export async function runStartForeground(opts: StartOptions): Promise<void> {
-  await ensureInitialized();
+  console.log("note-connector — ChatGPT Connector セットアップ中…");
+  const report = await setupDependencies();
+  for (const w of report.warnings) {
+    console.warn(`⚠ ${w}`);
+  }
+  loadOrCreateToken();
+  const fqdn = discoverTailscaleFqdn();
+  if (fqdn) {
+    const config = loadConfig();
+    if (!config.tunnel.domain) {
+      saveConfig({ ...config, tunnel: { ...config.tunnel, domain: fqdn } });
+      console.log(`Tailscale FQDN: ${fqdn}`);
+    }
+  }
+  console.log("依存関係の準備が完了しました。");
   const config = loadConfig();
   const preferred = opts.port ?? config.gatewayPort;
   let port: number;

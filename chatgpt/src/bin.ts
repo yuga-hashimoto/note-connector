@@ -14,7 +14,7 @@ program.name("note-connector").description("ChatGPT connector for note.com").ver
 
 program
   .command("start", { isDefault: true })
-  .description("Start note-connector in background (MCP + tunnel); terminal can close after setup")
+  .description("ChatGPT Connector: install deps (uv, repo, Playwright) and start in background")
   .option("--no-tunnel", "Do not start a public tunnel")
   .option("-p, --port <number>", "Local port", (v) => parseInt(v, 10))
   .option("--no-open", "Do not open ChatGPT / note.com in the browser")

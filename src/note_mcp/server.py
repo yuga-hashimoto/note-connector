@@ -775,8 +775,6 @@ async def note_delete_all_drafts(
         return f"一括削除に失敗しました: {e.message}"
 
 
-
-
 @mcp.tool(annotations={"readOnlyHint": True})
 async def note_search_public_articles(
     query: Annotated[str, "検索キーワード"],
@@ -818,6 +816,7 @@ async def note_fetch_public_article(
         f"ステータス: {article.status}\n\n"
         f"{preview}"
     )
+
 
 # Register investigator tools if in investigator mode
 if os.environ.get("INVESTIGATOR_MODE") == "1":

@@ -195,4 +195,3 @@ def register_chatgpt_tools(mcp: FastMCP, session_manager: SessionManager) -> Non
         except NoteAPIError as exc:
             return {"error": str(exc)}
         return article.model_dump()
-

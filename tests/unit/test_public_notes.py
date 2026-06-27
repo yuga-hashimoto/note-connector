@@ -16,10 +16,7 @@ from note_mcp.models import ErrorCode, NoteAPIError
 
 class TestExtractNoteKeyFromUrl:
     def test_standard_url(self) -> None:
-        assert (
-            extract_note_key_from_url("https://note.com/drillan/n/n7379c02632c9")
-            == "n7379c02632c9"
-        )
+        assert extract_note_key_from_url("https://note.com/drillan/n/n7379c02632c9") == "n7379c02632c9"
 
     def test_invalid_url(self) -> None:
         with pytest.raises(NoteAPIError) as exc:

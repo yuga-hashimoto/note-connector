@@ -33,6 +33,7 @@ async def test_note_create_draft_with_images_tool_registered(chatgpt_mcp: FastMC
     tools = await chatgpt_mcp.get_tools()
     assert "note_create_draft_with_images" in tools
 
+
 @pytest.mark.asyncio
 async def test_note_search_public_articles_tool_registered(chatgpt_mcp: FastMCP) -> None:
     tools = await chatgpt_mcp.get_tools()

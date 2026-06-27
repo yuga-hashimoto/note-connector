@@ -5,7 +5,10 @@ LocalAnt と同様、**git タグ `v*`** で GitHub Actions が npm に公開し
 ## 初回準備
 
 1. [npm](https://www.npmjs.com/package/note-connector) — **公開済み**（`note-connector@0.1.0`）
-2. リポジトリ **Settings → Secrets → Actions** に `NPM_TOKEN`（Automation または Publish トークン）を登録（タグ `v*` で自動 publish 用）
+2. リポジトリ **Settings → Secrets → Actions** に `NPM_TOKEN` を登録（タグ `v*` で自動 publish 用）
+   - npm の **Granular Access Token**（Packages: Read and write、**Bypass 2FA for publish** 推奨）
+   - または Classic token（Publish）+ 2FA 設定に合わせた運用
+   - CI 失敗例: `403 ... bypass 2fa enabled is required to publish`
 3. npm で [Trusted Publishing](https://docs.npmjs.com/trusted-publishers)（GitHub Actions）を設定（推奨）
 
 ## バージョンを上げて公開

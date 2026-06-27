@@ -4,7 +4,7 @@
   "publishConfig": {
     "access": "public"
   },
-  "description": "note-connector — ChatGPT connector for note.com (MCP + Apps SDK UI)",
+  "description": "ChatGPT Connector for note.com — MCP server with Apps SDK UI. One command setup: uv, Playwright, tunnel.",
   "license": "MIT",
   "type": "module",
   "bin": {

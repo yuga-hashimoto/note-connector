@@ -13,9 +13,7 @@ from note_mcp.utils.html_to_markdown import html_to_markdown
 
 NOTE_API_BASE = "https://note.com/api"
 USER_AGENT = "Mozilla/5.0 (compatible; note-connector/1.0)"
-NOTE_URL_PATTERN = re.compile(
-    r"^https?://(?:www\.)?note\.com/(?P<user>[a-zA-Z0-9_-]+)/n/(?P<key>n[a-z0-9]+)/?$"
-)
+NOTE_URL_PATTERN = re.compile(r"^https?://(?:www\.)?note\.com/(?P<user>[a-zA-Z0-9_-]+)/n/(?P<key>n[a-z0-9]+)/?$")
 NOTE_KEY_PATTERN = re.compile(r"^n[a-z0-9]+$")
 
 

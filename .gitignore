@@ -238,3 +238,6 @@ __marimo__/
 
 chatgpt/node_modules/
 chatgpt/dist/
+
+# Agent skills cache
+.agents/
