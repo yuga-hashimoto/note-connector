@@ -241,3 +241,4 @@ chatgpt/dist/
 
 # Agent skills cache
 .agents/
+chatgpt/py/

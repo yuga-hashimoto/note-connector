@@ -12,13 +12,14 @@
   },
   "files": [
     "dist/**",
+    "py/**",
     "README.md"
   ],
   "engines": {
     "node": ">=20.10"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && mkdir -p py && cp -r ../src ../pyproject.toml py/ && find py -name __pycache__ -type d -exec rm -rf {} + 2>/dev/null; true",
     "test": "npm run build && node --test dist/net.test.js dist/version.test.js dist/config.test.js",
     "prepublishOnly": "npm run build"
   },

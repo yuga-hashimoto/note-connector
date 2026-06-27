@@ -39,6 +39,10 @@ export function resolveNoteConnectorRepo(): string {
   if (fs.existsSync(path.join(fromGlobal, "src", "note_mcp"))) {
     return fromGlobal;
   }
+  const fromBundled = path.resolve(here, "..", "py");
+  if (fs.existsSync(path.join(fromBundled, "src", "note_mcp"))) {
+    return fromBundled;
+  }
   throw new Error(
     "note-connector Python 本体が見つかりません。\n"
       + "  note-connector config set repoPath /path/to/note-connector\n"

@@ -56,25 +56,51 @@ function repoHasPython(root: string): boolean {
   return fs.existsSync(path.join(root, "pyproject.toml")) && fs.existsSync(path.join(root, "src", "note_mcp"));
 }
 
-function cloneRepo(target: string): void {
-  if (!commandExists("git")) {
-    throw new Error(
-      "git が見つかりません。git をインストールするか、\n" +
-        "手動で clone して repoPath を設定してください。\n" +
-        `  git clone ${DEFAULT_REPO} ${target}\n` +
-        `  note-connector config set repoPath ${target}`,
-    );
+function npmPackagePythonRoot(): string | null {
+  try {
+    const root = resolveNoteConnectorRepo();
+    return root;
+  } catch {
+    return null;
   }
-  console.log(`Cloning note-connector → ${target}`);
-  fs.mkdirSync(path.dirname(target), { recursive: true });
-  execFileSync("git", ["clone", "--depth", "1", DEFAULT_REPO, target], { stdio: "inherit" });
 }
 
-function updateRepo(repo: string): void {
+function copyBundledPython(target: string): void {
+  const source = npmPackagePythonRoot();
+  if (!source) {
+    throw new Error("npm パッケージにPythonソースが見つかりません。npm install -g を再実行してください。");
+  }
+  // Remove old repo and copy fresh from npm package
+  if (fs.existsSync(target)) {
+    fs.rmSync(target, { recursive: true, force: true });
+  }
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  console.log("Python ソースを npm からコピー中…");
+  fs.cpSync(source, target, { recursive: true });
+}
+
+function updateRepo(target: string): void {
+  // Prefer bundled npm copy over git pull
+  const npmRoot = npmPackagePythonRoot();
+  if (npmRoot && target !== npmRoot) {
+    try {
+      // Check which is newer: npm package vs local repo
+      const npmSrcStat = fs.statSync(path.join(npmRoot, "src", "note_mcp", "server.py"));
+      const localSrcStat = fs.statSync(path.join(target, "src", "note_mcp", "server.py"));
+      if (npmSrcStat.mtimeMs > localSrcStat.mtimeMs) {
+        copyBundledPython(target);
+        console.log("note-connector を最新に更新しました（npm同梱版）");
+        return;
+      }
+    } catch {
+      // File stat failed, skip update
+    }
+  }
+  // Fall back to git pull for manually cloned repos
   if (!commandExists("git")) return;
   try {
     const result = spawnSync("git", ["pull", "--ff-only", "origin", "main"], {
-      cwd: repo,
+      cwd: target,
       encoding: "utf8",
       timeout: 15000,
     });
@@ -98,9 +124,23 @@ function ensureRepoPath(config: NoteConnectorConfig): string {
   const target = path.join(configDir(), "repo");
   if (!repoHasPython(target)) {
     if (fs.existsSync(target)) {
-      throw new Error(`Incomplete repo at ${target}. Remove it or set repoPath.`);
+      // Incomplete, remove and retry
+      fs.rmSync(target, { recursive: true, force: true });
     }
-    cloneRepo(target);
+    // Try to copy from npm package first, fall back to git clone
+    const npmRoot = npmPackagePythonRoot();
+    if (npmRoot) {
+      copyBundledPython(target);
+    } else if (commandExists("git")) {
+      console.log(`Cloning note-connector → ${target}`);
+      execFileSync("git", ["clone", "--depth", "1", DEFAULT_REPO, target], { stdio: "inherit" });
+    } else {
+      throw new Error(
+        "Python ソースが見つからず、git もありません。\n" +
+          "npm install -g note-connector を再実行するか、\n" +
+          "git clone でリポジトリを取得して repoPath を設定してください。",
+      );
+    }
   }
   const updated = { ...config, repoPath: target };
   saveConfig(updated);
@@ -146,7 +186,7 @@ export async function setupDependencies(): Promise<SetupReport> {
   }
   if (!commandExists("git")) {
     warnings.push(
-      "git がありません。初回起動は動作しますが、更新を自動取得するには git をインストールしてください。",
+      "git がありません。最新バージョンは npm install -g note-connector で更新されます。",
     );
   }
 
