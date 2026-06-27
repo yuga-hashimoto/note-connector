@@ -14,10 +14,12 @@ from fastmcp import FastMCP
 from note_mcp.api.articles import (
     create_draft,
     delete_all_drafts,
+    delete_article,
     delete_draft,
     get_article,
     list_articles,
     publish_article,
+    unpublish_article,
     update_article,
 )
 from note_mcp.api.images import insert_image_via_api, upload_body_image, upload_eyecatch_image
@@ -773,6 +775,86 @@ async def note_delete_all_drafts(
 
     except NoteAPIError as e:
         return f"一括削除に失敗しました: {e.message}"
+
+
+@mcp.tool()
+async def note_delete_article(
+    article_key: Annotated[str, "削除する記事のキー（例: n1234567890ab）"],
+    confirm: Annotated[bool, "削除を実行する場合はTrue、確認のみの場合はFalse"] = False,
+) -> str:
+    """公開記事を含む任意の記事を削除します。
+
+    note_delete_draft と異なり、公開済みの記事も削除できます。
+    **削除は取り消せません。**
+
+    2段階確認フロー:
+    1. confirm=False: 削除対象の記事情報を表示（実際の削除は行わない）
+    2. confirm=True: 実際に削除を実行
+
+    Args:
+        article_key: 削除する記事のキー
+        confirm: 削除を実行する場合はTrue（デフォルトはFalse）
+
+    Returns:
+        削除結果または確認メッセージ
+    """
+    session = _session_manager.load()
+    if session is None or session.is_expired():
+        return "セッションが無効です。note_loginでログインしてください。"
+
+    try:
+        result = await delete_article(session, article_key, confirm=confirm)
+
+        from note_mcp.models import DeletePreview, DeleteResult
+
+        if isinstance(result, DeletePreview):
+            return (
+                f"削除対象の記事:\n"
+                f"  タイトル: {result.article_title}\n"
+                f"  キー: {result.article_key}\n"
+                f"  ステータス: {result.status.value}\n\n"
+                f"{result.message}"
+            )
+        elif isinstance(result, DeleteResult):
+            return result.message
+
+        return str(result)
+
+    except NoteAPIError as e:
+        return f"削除に失敗しました: {e.message}"
+
+
+@mcp.tool()
+async def note_unpublish_article(
+    article_key: Annotated[str, "下書きに戻す公開記事のキー（例: n1234567890ab）"],
+) -> str:
+    """公開記事を下書きに戻します。
+
+    公開済みの記事を下書き状態に戻します。記事の内容は保持されます。
+    すでに下書きの記事に対して実行するとエラーになります。
+
+    Args:
+        article_key: 下書きに戻す公開記事のキー
+
+    Returns:
+        下書きに戻した記事情報
+    """
+    session = _session_manager.load()
+    if session is None or session.is_expired():
+        return "セッションが無効です。note_loginでログインしてください。"
+
+    try:
+        article = await unpublish_article(session, article_key)
+        return (
+            f"記事を下書きに戻しました:\n"
+            f"  タイトル: {article.title}\n"
+            f"  キー: {article.key}\n"
+            f"  ステータス: draft\n"
+            f"  URL: {article.url}"
+        )
+
+    except NoteAPIError as e:
+        return f"下書き戻しに失敗しました: {e.message}"
 
 
 @mcp.tool(annotations={"readOnlyHint": True})

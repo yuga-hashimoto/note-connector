@@ -59,13 +59,18 @@ class TestGetEmbedService:
         assert get_embed_service("https://gist.github.com/user-name/abc123def") == "gist"
         assert get_embed_service("http://gist.github.com/user/gist123") == "gist"
 
-    def test_unsupported_url_returns_none(self) -> None:
-        """Test that unsupported URLs return None."""
+    def test_generic_url_returns_external_article(self) -> None:
+        """Test that generic HTTP URLs are treated as URL cards (external-article)."""
         from note_mcp.api.embeds import get_embed_service
 
-        assert get_embed_service("https://example.com") is None
-        assert get_embed_service("https://google.com") is None
-        assert get_embed_service("https://vimeo.com/123456") is None
+        assert get_embed_service("https://example.com") == "external-article"
+        assert get_embed_service("https://google.com") == "external-article"
+        assert get_embed_service("https://vimeo.com/123456") == "external-article"
+
+    def test_non_url_returns_none(self) -> None:
+        """Test that non-URL strings return None."""
+        from note_mcp.api.embeds import get_embed_service
+
         assert get_embed_service("not a url") is None
 
 
@@ -99,12 +104,17 @@ class TestIsEmbedUrl:
         assert is_embed_url("https://gist.github.com/defunkt/2059") is True
         assert is_embed_url("https://gist.github.com/user-name/abc123") is True
 
-    def test_unsupported_urls_are_not_embed_urls(self) -> None:
-        """Test that unsupported URLs are not recognized as embed URLs."""
+    def test_generic_urls_are_embed_urls(self) -> None:
+        """Test that generic HTTP URLs are recognized as URL card embeds."""
         from note_mcp.api.embeds import is_embed_url
 
-        assert is_embed_url("https://example.com") is False
-        assert is_embed_url("https://google.com") is False
+        assert is_embed_url("https://example.com") is True
+        assert is_embed_url("https://google.com") is True
+
+    def test_non_url_is_not_embed_url(self) -> None:
+        """Test that non-URL strings are not embed URLs."""
+        from note_mcp.api.embeds import is_embed_url
+
         assert is_embed_url("not a url") is False
 
 
@@ -223,12 +233,13 @@ class TestGenerateEmbedHtml:
         assert "&amp;" in html or "feature=share" in html
         assert '"<script>' not in html  # Should be escaped
 
-    def test_unsupported_url_raises_error(self) -> None:
-        """Test that unsupported URL raises ValueError."""
+    def test_generic_url_generates_external_article_figure(self) -> None:
+        """Test that generic URL generates external-article embed figure."""
         from note_mcp.api.embeds import generate_embed_html
 
-        with pytest.raises(ValueError, match="Unsupported embed URL"):
-            generate_embed_html("https://example.com")
+        html = generate_embed_html("https://example.com")
+        assert 'embedded-service="external-article"' in html
+        assert 'data-src="https://example.com"' in html
 
     def test_embed_key_parameter(self) -> None:
         """Test that embed_key parameter is used when provided."""
@@ -546,9 +557,10 @@ class TestFetchEmbedKey:
             assert "blockquote" in html_for_embed
 
     @pytest.mark.asyncio
-    async def test_fetch_embed_key_unsupported_url(self) -> None:
-        """Test that unsupported URL raises ValueError."""
+    async def test_fetch_embed_key_generic_url(self) -> None:
+        """Test that generic URL is processed as external-article via GET /v2/embed_by_external_api."""
         import time
+        from unittest.mock import AsyncMock, patch
 
         from note_mcp.api.embeds import fetch_embed_key
         from note_mcp.models import Session
@@ -560,8 +572,31 @@ class TestFetchEmbedKey:
             created_at=int(time.time()),
         )
 
-        with pytest.raises(ValueError, match="Unsupported embed URL"):
-            await fetch_embed_key(session, "https://example.com", "n1234567890ab")
+        mock_response = {
+            "data": {
+                "key": "embgeneric12345678",
+                "html_for_embed": "<figure><div>Example</div></figure>",
+            }
+        }
+
+        with patch("note_mcp.api.embeds.NoteAPIClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.get.return_value = mock_response
+            mock_client.__aenter__.return_value = mock_client
+            mock_client.__aexit__.return_value = None
+            mock_client_class.return_value = mock_client
+
+            embed_key, html_for_embed = await fetch_embed_key(session, "https://example.com", "n1234567890ab")
+
+            assert embed_key == "embgeneric12345678"
+            assert "Example" in html_for_embed
+
+            # Verify it called the v2 endpoint with external-article service
+            mock_client.get.assert_called_once()
+            call_args = mock_client.get.call_args
+            assert call_args[0][0] == "/v2/embed_by_external_api"
+            assert call_args[1]["params"]["service"] == "external-article"
+            assert call_args[1]["params"]["url"] == "https://example.com"
 
     @pytest.mark.asyncio
     async def test_fetch_embed_key_api_error(self) -> None:
@@ -1000,12 +1035,14 @@ class TestGenerateEmbedHtmlWithKey:
         assert 'embedded-service="note"' in html
         assert f'embedded-content-key="{embed_key}"' in html
 
-    def test_unsupported_url_raises_error(self) -> None:
-        """Test that unsupported URL raises ValueError."""
+    def test_generic_url_generates_external_article_with_key(self) -> None:
+        """Test that generic URL generates external-article embed with server key."""
         from note_mcp.api.embeds import generate_embed_html_with_key
 
-        with pytest.raises(ValueError, match="Unsupported embed URL"):
-            generate_embed_html_with_key("https://example.com", "emb123")
+        html = generate_embed_html_with_key("https://example.com", "emb123")
+        assert 'embedded-service="external-article"' in html
+        assert 'data-src="https://example.com"' in html
+        assert 'embedded-content-key="emb123"' in html
 
     def test_url_escaping(self) -> None:
         """Test that special characters in URL are properly escaped."""

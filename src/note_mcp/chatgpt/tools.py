@@ -8,7 +8,7 @@ from typing import Annotated, Any
 
 from fastmcp import FastMCP
 
-from note_mcp.api.articles import create_draft, list_articles
+from note_mcp.api.articles import create_draft, delete_article, list_articles, unpublish_article
 from note_mcp.api.images import insert_image_via_api
 from note_mcp.api.public_notes import fetch_public_article, search_public_notes
 from note_mcp.auth.session import SessionManager
@@ -195,3 +195,61 @@ def register_chatgpt_tools(mcp: FastMCP, session_manager: SessionManager) -> Non
         except NoteAPIError as exc:
             return {"error": str(exc)}
         return article.model_dump()
+
+    @mcp.tool()
+    async def note_delete_article(
+        article_key: Annotated[str, "削除する記事のキー（例: n1234567890ab）"],
+        confirm: Annotated[bool, "削除を実行する場合はTrue、確認のみの場合はFalse"] = False,
+    ) -> dict[str, object]:
+        """公開記事を含む任意の記事を削除します（下書き・公開問わず削除可、取り消し不可）。"""
+        session = session_manager.load()
+        if session is None or session.is_expired():
+            return {"error": "セッションが無効です。note_loginでログインしてください。"}
+
+        try:
+            result = await delete_article(session, article_key, confirm=confirm)
+        except NoteAPIError as exc:
+            return {"error": str(exc)}
+
+        from note_mcp.models import DeletePreview, DeleteResult
+
+        if isinstance(result, DeletePreview):
+            return {
+                "action": "preview",
+                "article_title": result.article_title,
+                "article_key": result.article_key,
+                "status": result.status.value,
+                "message": result.message,
+            }
+        elif isinstance(result, DeleteResult):
+            return {
+                "action": "deleted",
+                "success": result.success,
+                "article_title": result.article_title,
+                "article_key": result.article_key,
+                "message": result.message,
+            }
+        return {"result": str(result)}
+
+    @mcp.tool()
+    async def note_unpublish_article(
+        article_key: Annotated[str, "下書きに戻す公開記事のキー（例: n1234567890ab）"],
+    ) -> dict[str, object]:
+        """公開記事を下書きに戻します（記事内容は保持されます）。"""
+        session = session_manager.load()
+        if session is None or session.is_expired():
+            return {"error": "セッションが無効です。note_loginでログインしてください。"}
+
+        try:
+            article = await unpublish_article(session, article_key)
+        except NoteAPIError as exc:
+            return {"error": str(exc)}
+
+        return {
+            "unpublished": True,
+            "title": article.title,
+            "key": article.key,
+            "status": "draft",
+            "url": article.url,
+            "message": f"記事「{article.title}」を下書きに戻しました。",
+        }

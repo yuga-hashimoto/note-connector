@@ -6,9 +6,11 @@ Provides HTTP client and API operations for note.com.
 from note_mcp.api.articles import (
     create_draft,
     delete_all_drafts,
+    delete_article,
     delete_draft,
     list_articles,
     publish_article,
+    unpublish_article,
     update_article,
 )
 from note_mcp.api.client import NoteAPIClient
@@ -18,9 +20,11 @@ __all__ = [
     "NoteAPIClient",
     "create_draft",
     "delete_all_drafts",
+    "delete_article",
     "delete_draft",
     "list_articles",
     "publish_article",
+    "unpublish_article",
     "update_article",
     "upload_body_image",
     "upload_eyecatch_image",

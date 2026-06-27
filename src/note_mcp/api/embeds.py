@@ -94,9 +94,15 @@ GOOGLE_SLIDES_PATTERN = re.compile(
 # Example: https://speakerdeck.com/tomohisa/introducing-decider-pattern-with-event-sourcing (Issue #223)
 SPEAKERDECK_PATTERN = re.compile(r"^https?://speakerdeck\.com/[\w-]+/[\w-]+$")
 
+# Generic URL pattern: catch-all for any HTTP(S) URL
+# Used as fallback for URL card / link card embeds (Open Graph preview)
+# Matches any web URL not already handled by specific patterns above.
+GENERIC_URL_PATTERN = re.compile(r"^https?://[^\s<>\"{}|\\^`\[\]]+$")
+
 # Data-driven pattern to service mapping (Issue #235: DRY principle)
 # Note: GIST_PATTERN and GITHUB_REPO_PATTERN are mutually exclusive by design
 # (GIST_PATTERN matches gist.github.com, GITHUB_REPO_PATTERN matches github.com only).
+# Note: GENERIC_URL_PATTERN must be LAST so specific services match first.
 EMBED_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (YOUTUBE_PATTERN, "youtube"),
     (TWITTER_PATTERN, "twitter"),
@@ -109,6 +115,7 @@ EMBED_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (ZENN_PATTERN, "external-article"),
     (QIITA_PATTERN, "external-article"),  # Qiita also uses external-article (Issue #244)
     (CONNPASS_PATTERN, "external-article"),  # connpass.com events (Issue #254)
+    (GENERIC_URL_PATTERN, "external-article"),  # URL cards (Open Graph preview) — MUST be last
 ]
 
 

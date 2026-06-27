@@ -632,16 +632,14 @@ class TestStandaloneUrl:
     対応しているのはYouTube、Twitter、note.com記事のみです。
     """
 
-    def test_standalone_url_becomes_link(self) -> None:
-        """単独行のURLはリンクテキストになる（埋め込みにはならない）"""
+    def test_standalone_url_becomes_url_card(self) -> None:
+        """単独行のURLはURLカード埋め込み（external-article figure）に変換される"""
         markdown = "https://example.com/article"
         result = markdown_to_html(markdown)
 
-        # 埋め込み属性がないことを確認
-        assert "data-embed-service" not in result
-        assert "embedded-service" not in result
-        # URLはテキストとして含まれる
-        assert "https://example.com/article" in result
+        assert "embedded-service" in result
+        assert 'data-src="https://example.com/article"' in result
+        assert "<figure" in result
 
     def test_url_in_text_preserved(self) -> None:
         """文中のURLは保持される"""
@@ -767,13 +765,13 @@ https://twitter.com/user/status/123"""
         assert 'href="https://www.youtube.com/watch?v=dQw4w9WgXcQ"' in result
         assert 'embedded-service="youtube"' not in result
 
-    def test_unsupported_url_not_converted(self) -> None:
-        """サポートされていないURLは埋め込みに変換されない"""
+    def test_generic_url_converted_to_url_card(self) -> None:
+        """任意のURLもURLカード（external-article）に変換される"""
         markdown = "https://vimeo.com/123456"
         result = markdown_to_html(markdown)
 
-        assert "<figure" not in result
-        assert "embedded-service" not in result
+        assert "<figure" in result
+        assert 'embedded-service="external-article"' in result
         assert "https://vimeo.com/123456" in result
 
 
@@ -799,10 +797,10 @@ class TestHasEmbedUrl:
         assert has_embed_url("https://gist.github.com/defunkt/2059") is True
         assert has_embed_url("https://gist.github.com/user-name/abc123") is True
 
-    def test_unsupported_url_not_detected(self) -> None:
-        """サポートされていないURLは検出されない"""
-        assert has_embed_url("https://vimeo.com/123456") is False
-        assert has_embed_url("https://example.com") is False
+    def test_generic_url_detected(self) -> None:
+        """任意のURLも検出される"""
+        assert has_embed_url("https://vimeo.com/123456") is True
+        assert has_embed_url("https://example.com") is True
 
     def test_url_in_text_detected(self) -> None:
         """テキスト内の埋め込みURLも検出される"""

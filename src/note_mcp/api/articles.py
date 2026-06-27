@@ -1044,6 +1044,48 @@ async def delete_draft(
         result = await delete_draft(session, "n1234567890ab", confirm=True)
         print(f"Deleted: {result.message}")
     """
+    return await delete_article(session, article_key, confirm=confirm, allow_published=False)
+
+
+async def delete_article(
+    session: Session,
+    article_key: str,
+    *,
+    confirm: bool = False,
+    allow_published: bool = True,
+) -> DeleteResult | DeletePreview:
+    """Delete an article (draft or published).
+
+    Deletes an article from note.com. By default, both draft and published
+    articles can be deleted. Set allow_published=False to restrict to drafts only.
+
+    This function implements a two-step confirmation flow:
+    1. When confirm=False: Returns a DeletePreview with article info
+    2. When confirm=True: Actually deletes the article
+
+    Args:
+        session: Authenticated session
+        article_key: Key of the article to delete (format: nXXXXXXXXXXXX)
+        confirm: Confirmation flag (must be True to execute deletion)
+        allow_published: If False, raises error when article is published
+
+    Returns:
+        DeletePreview when confirm=False (shows what will be deleted)
+        DeleteResult when confirm=True (deletion result)
+
+    Raises:
+        NoteAPIError: If article is published (and allow_published=False),
+                     not found, or API fails
+
+    Example:
+        # Step 1: Preview what will be deleted
+        preview = await delete_article(session, "n1234567890ab", confirm=False)
+        print(f"Will delete: {preview.article_title}")
+
+        # Step 2: Actually delete
+        result = await delete_article(session, "n1234567890ab", confirm=True)
+        print(f"Deleted: {result.message}")
+    """
     # Import here to avoid circular imports
     from note_mcp.models import (
         DELETE_ERROR_PUBLISHED_ARTICLE,
@@ -1058,8 +1100,8 @@ async def delete_draft(
         _parse_article_response,
     )
 
-    # Check if article is published (cannot delete published articles)
-    if article.status == ArticleStatus.PUBLISHED:
+    # Check if article is published and not allowed
+    if article.status == ArticleStatus.PUBLISHED and not allow_published:
         raise NoteAPIError(
             code=ErrorCode.API_ERROR,
             message=DELETE_ERROR_PUBLISHED_ARTICLE,
@@ -1079,25 +1121,122 @@ async def delete_draft(
 
     # If confirm=False, return preview without deleting
     if not confirm:
+        status_label = "公開記事" if article.status == ArticleStatus.PUBLISHED else "下書き記事"
         return DeletePreview(
             article_id=article.id,
             article_key=article.key,
             article_title=article.title,
             status=article.status,
-            message=f"下書き記事「{article.title}」を削除しますか？confirm=True を指定して再度呼び出してください。",
+            message=(
+                f"{status_label}「{article.title}」を削除しますか？confirm=True を指定して再度呼び出してください。"
+            ),
         )
 
     # Step 2: Execute deletion (confirm=True)
     # Note: The delete endpoint requires /n/ prefix before the article key
     await _execute_delete(session, f"/v1/notes/n/{article_key}")
 
+    status_label = "公開記事" if article.status == ArticleStatus.PUBLISHED else "下書き記事"
     return DeleteResult(
         success=True,
         article_id=article.id,
         article_key=article.key,
         article_title=article.title,
-        message=f"下書き記事「{article.title}」({article.key})を削除しました。",
+        message=f"{status_label}「{article.title}」({article.key})を削除しました。",
     )
+
+
+async def unpublish_article(
+    session: Session,
+    article_key: str,
+) -> Article:
+    """Unpublish an article (revert published article to draft).
+
+    Changes a published article's status back to draft. The article content
+    is preserved. Only published articles can be unpublished.
+
+    Args:
+        session: Authenticated session
+        article_key: Key of the article to unpublish (format: nXXXXXXXXXXXX)
+
+    Returns:
+        Article object with updated draft status
+
+    Raises:
+        NoteAPIError: If article is already a draft, not found, or API fails
+
+    Example:
+        article = await unpublish_article(session, "n1234567890ab")
+        print(f"Reverted to draft: {article.title}")
+    """
+    # Validate article key format
+    if article_key.isdigit():
+        raise NoteAPIError(
+            code=ErrorCode.INVALID_INPUT,
+            message=(
+                f"Numeric article ID '{article_key}' is not supported. "
+                "Please use the article key format (e.g., 'n1234567890ab')."
+            ),
+            details={"article_key": article_key},
+        )
+
+    # Fetch article info
+    article = await _execute_get(
+        session,
+        f"/v3/notes/{article_key}",
+        _parse_article_response,
+    )
+
+    # Check status
+    if article.status == ArticleStatus.DELETED:
+        raise NoteAPIError(
+            code=ErrorCode.ARTICLE_NOT_FOUND,
+            message="Article has been deleted (status='deleted')",
+            details={"article_key": article_key},
+        )
+
+    if article.status == ArticleStatus.DRAFT:
+        raise NoteAPIError(
+            code=ErrorCode.API_ERROR,
+            message="Article is already a draft",
+            details={"article_key": article_key, "status": article.status.value},
+        )
+
+    # Resolve numeric ID for PUT endpoint
+    numeric_id = await _resolve_numeric_note_id(session, article_key)
+
+    # Get article body for PUT
+    async with NoteAPIClient(session) as client:
+        article_response = await client.get(f"/v3/notes/{article_key}")
+        article_data = article_response.get("data", {})
+        article_title = article_data.get("name", "")
+        if not article_title:
+            note_draft = article_data.get("note_draft")
+            if isinstance(note_draft, dict):
+                article_title = note_draft.get("name", "")
+        article_body = article_data.get("body") or ""
+
+        # PUT with status=draft to unpublish
+        payload: dict[str, Any] = {
+            "name": article_title,
+            "free_body": article_body,
+            "body_length": len(article_body),
+            "status": "draft",
+            "index": False,
+        }
+
+        response = await client.put(f"/v1/text_notes/{numeric_id}", json=payload)
+
+    # Validate API response
+    data = response.get("data", {})
+    if data.get("result") is False:
+        raise NoteAPIError(
+            code=ErrorCode.API_ERROR,
+            message="Failed to unpublish article: API returned failure",
+            details={"article_key": article_key, "response": response},
+        )
+
+    return await get_article_via_api(session, article_key)
 
 
 async def delete_all_drafts(
