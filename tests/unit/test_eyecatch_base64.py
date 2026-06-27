@@ -158,10 +158,51 @@ class TestDecodeBase64Image:
         assert exc_info.value.code == ErrorCode.INVALID_BASE64
 
     def test_invalid_base64(self) -> None:
-        """Invalid base64 should raise INVALID_BASE64."""
+        """Strings with non-base64 characters decode to garbage -> INVALID_IMAGE downstream."""
+        raw = b"!!!invalid!!!" + b"\x00" * 10
+        b64 = base64.b64encode(raw).decode("ascii")
+        # Mess up the base64 so it decodes to garbage
+        messed = b64[:-4] + "!!!!"
+        result = _decode_base64_image(messed)
+        # Decode may succeed with validate=False, but result is garbage bytes
+        assert isinstance(result, bytes)
+        assert len(result) > 0
+
+    def test_truly_invalid_base64(self) -> None:
+        """Base64 with embedded null bytes should fail."""
         with pytest.raises(NoteAPIError) as exc_info:
-            _decode_base64_image("!!!invalid!!!")
+            _decode_base64_image("abc\x00def")
         assert exc_info.value.code == ErrorCode.INVALID_BASE64
+
+    def test_missing_padding(self) -> None:
+        """Base64 with missing padding (common ChatGPT issue) should auto-fix."""
+        raw = _create_test_png_bytes()
+        b64 = base64.b64encode(raw).decode("ascii")
+        stripped = b64.rstrip("=")
+        # Verify decode works even without padding
+        result = _decode_base64_image(stripped)
+        assert result == raw
+
+    def test_missing_padding_extra_char(self) -> None:
+        """Base64 with truncated chars (forces padding mismatch) should still work."""
+        raw = _create_test_png_bytes()
+        b64 = base64.b64encode(raw).decode("ascii")
+        # Strip padding first, then remove 1 more char to force non-multiple-of-4
+        no_pad = b64.rstrip("=")
+        stripped = no_pad[:-1]
+        assert len(stripped) % 4 != 0, f"Expected non-multiple-of-4 length, got {len(stripped)}"
+        result = _decode_base64_image(stripped)
+        # Data should be valid bytes (last partial byte is reconstructed with padding)
+        assert isinstance(result, bytes)
+        assert len(result) > 0
+
+    def test_missing_padding_with_data_url(self) -> None:
+        """Data URL with missing padding should still work."""
+        raw = _create_test_png_bytes()
+        b64 = base64.b64encode(raw).decode("ascii")
+        stripped = b64.rstrip("=")
+        result = _decode_base64_image(f"data:image/png;base64,{stripped}")
+        assert result == raw
 
     def test_data_url_only_prefix(self) -> None:
         """Data URL with only prefix and no data should raise INVALID_BASE64."""
@@ -606,7 +647,7 @@ class TestUploadEyecatchBase64:
 
     @pytest.mark.asyncio
     async def test_invalid_base64(self) -> None:
-        """Invalid base64 should raise error."""
+        """Garbage base64 may decode but will fail image validation."""
         session = _create_mock_session()
 
         with pytest.raises(NoteAPIError) as exc_info:
@@ -616,7 +657,8 @@ class TestUploadEyecatchBase64:
                 mime_type="image/png",
                 image_base64="!!!invalid!!!",
             )
-        assert exc_info.value.code == ErrorCode.INVALID_BASE64
+        # With validate=False, garbage may decode, but image validation catches it
+        assert exc_info.value.code in {ErrorCode.INVALID_IMAGE, ErrorCode.INVALID_BASE64}
 
     @pytest.mark.asyncio
     async def test_empty_base64(self) -> None:

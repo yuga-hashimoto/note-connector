@@ -570,14 +570,30 @@ def _decode_base64_image(image_base64: str) -> bytes:
     """
     clean = _strip_data_url_prefix(image_base64)
 
-    if not clean.strip():
+    # Strip whitespace and newlines (common in ChatGPT output)
+    clean = re.sub(r"\s+", "", clean)
+
+    if not clean:
         raise NoteAPIError(
             code=ErrorCode.INVALID_BASE64,
             message="image_base64 が空です。",
         )
 
+    # Fix missing padding: base64 length must be a multiple of 4
+    # ChatGPT sometimes drops trailing '=' padding chars
+    remainder = len(clean) % 4
+    if remainder:
+        clean += "=" * (4 - remainder)
+
     try:
-        return base64.b64decode(clean, validate=True)
+        # validate=False: tolerate non-strict base64 (extra chars, minor format issues)
+        result = base64.b64decode(clean, validate=False)
+        if not result:
+            raise NoteAPIError(
+                code=ErrorCode.INVALID_BASE64,
+                message="image_base64 をデコードしましたが、データが空でした。",
+            )
+        return result
     except (binascii.Error, ValueError) as e:
         raise NoteAPIError(
             code=ErrorCode.INVALID_BASE64,
