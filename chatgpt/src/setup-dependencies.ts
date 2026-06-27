@@ -62,6 +62,21 @@ function cloneRepo(target: string): void {
   execFileSync("git", ["clone", "--depth", "1", DEFAULT_REPO, target], { stdio: "inherit" });
 }
 
+function updateRepo(repo: string): void {
+  try {
+    const result = spawnSync("git", ["pull", "--ff-only", "origin", "main"], {
+      cwd: repo,
+      encoding: "utf8",
+      timeout: 15000,
+    });
+    if (result.status === 0 && !String(result.stdout).trim().includes("Already up to date")) {
+      console.log("note-connector を最新に更新しました");
+    }
+  } catch {
+    // Network issues or git not available — skip silently
+  }
+}
+
 function ensureRepoPath(config: NoteConnectorConfig): string {
   if (config.repoPath && repoHasPython(config.repoPath)) {
     return path.resolve(config.repoPath);
@@ -113,6 +128,7 @@ export async function setupDependencies(): Promise<SetupReport> {
   ensureUv();
 
   const repo = ensureRepoPath(config);
+  updateRepo(repo);
   runUvSync(repo);
   ensurePlaywright(repo);
 
