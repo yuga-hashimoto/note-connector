@@ -13,6 +13,7 @@ import pytest
 
 from note_mcp.api.images import (
     _decode_base64_image,
+    _extract_image_url_from_response,
     _strip_data_url_prefix,
     _validate_image_bytes,
     _validate_mime_type,
@@ -210,6 +211,80 @@ class TestValidateMimeType:
         with pytest.raises(NoteAPIError) as exc_info:
             _validate_mime_type("")
         assert exc_info.value.code == ErrorCode.UNSUPPORTED_MIME_TYPE
+
+
+# =============================================================================
+# _extract_image_url_from_response
+# =============================================================================
+
+
+class TestExtractImageUrlFromResponse:
+    """Tests for _extract_image_url_from_response."""
+
+    def test_extract_url_field(self) -> None:
+        """Standard 'url' field in data."""
+        result = _extract_image_url_from_response({"data": {"url": "https://example.com/img.png"}})
+        assert result == "https://example.com/img.png"
+
+    def test_extract_image_url_field(self) -> None:
+        """'image_url' field in data."""
+        result = _extract_image_url_from_response({"data": {"image_url": "https://example.com/img.png"}})
+        assert result == "https://example.com/img.png"
+
+    def test_extract_src_field(self) -> None:
+        """'src' field in data."""
+        result = _extract_image_url_from_response({"data": {"src": "https://example.com/img.png"}})
+        assert result == "https://example.com/img.png"
+
+    def test_extract_download_url_field(self) -> None:
+        """'download_url' field in data."""
+        result = _extract_image_url_from_response({"data": {"download_url": "https://example.com/img.png"}})
+        assert result == "https://example.com/img.png"
+
+    def test_extract_note_image_url_field(self) -> None:
+        """'note_image_url' field in data."""
+        result = _extract_image_url_from_response({"data": {"note_image_url": "https://example.com/img.png"}})
+        assert result == "https://example.com/img.png"
+
+    def test_no_url_returns_none(self) -> None:
+        """Response without any URL field returns None."""
+        result = _extract_image_url_from_response({"data": {"status": "ok"}})
+        assert result is None
+
+    def test_empty_data_returns_none(self) -> None:
+        """Empty data dict returns None."""
+        result = _extract_image_url_from_response({"data": {}})
+        assert result is None
+
+    def test_no_data_key_returns_none(self) -> None:
+        """Response without 'data' key returns None."""
+        result = _extract_image_url_from_response({"status": "ok"})
+        assert result is None
+
+    def test_top_level_url(self) -> None:
+        """URL at top level of response (fallback)."""
+        result = _extract_image_url_from_response({"url": "https://example.com/img.png", "data": {}})
+        assert result == "https://example.com/img.png"
+
+    def test_empty_url_not_returned(self) -> None:
+        """Empty string URL should not be returned."""
+        result = _extract_image_url_from_response({"data": {"url": ""}})
+        assert result is None
+
+    def test_whitespace_url_not_returned(self) -> None:
+        """Whitespace-only URL should not be returned."""
+        result = _extract_image_url_from_response({"data": {"url": "   "}})
+        assert result is None
+
+    def test_url_priority_data_over_top(self) -> None:
+        """URL in data takes priority over top-level."""
+        result = _extract_image_url_from_response(
+            {
+                "data": {"url": "https://example.com/data.png"},
+                "url": "https://example.com/top.png",
+            }
+        )
+        assert result == "https://example.com/data.png"
 
 
 # =============================================================================

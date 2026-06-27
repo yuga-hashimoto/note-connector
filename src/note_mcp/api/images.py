@@ -117,6 +117,43 @@ _MAGIC_BYTES: dict[str, tuple[bytes, int]] = {
 }
 
 
+def _extract_image_url_from_response(response: dict[str, Any]) -> str | None:
+    """Extract image URL from API response, trying multiple possible field names.
+
+    note.com API may return the URL under different field names.
+    This function tries known field names in order of preference.
+
+    Args:
+        response: Full API response dictionary
+
+    Returns:
+        Image URL string if found, None otherwise
+    """
+    data = response.get("data", {})
+
+    # Try known field names for image URL
+    candidate_keys = [
+        "url",
+        "image_url",
+        "src",
+        "download_url",
+        "note_image_url",
+    ]
+
+    for key in candidate_keys:
+        value = data.get(key)
+        if value and isinstance(value, str) and value.strip():
+            return str(value)
+
+    # Check if the top-level response itself is a string URL
+    for key in candidate_keys:
+        value = response.get(key)
+        if value and isinstance(value, str) and value.strip():
+            return str(value)
+
+    return None
+
+
 def validate_image_file(file_path: str) -> None:
     """Validate image file before upload.
 
@@ -207,25 +244,36 @@ async def _upload_image_internal(
     async with NoteAPIClient(session) as client:
         response = await client.post(endpoint, files=files, data=data)
 
-    # Parse response - Article 6: validate required fields, no fallback
-    image_data = response.get("data", {})
+    # Debug: log full API response for investigation
+    logger.debug(
+        "Image upload response for note_id=%s, endpoint=%s: %s",
+        numeric_note_id,
+        endpoint,
+        {k: v for k, v in response.items() if k != "data"},
+    )
+    if "data" in response:
+        logger.debug("Image upload response data keys: %s", list(response["data"].keys()))
+        logger.debug("Image upload response data: %s", response["data"])
 
-    # Note: The eyecatch upload endpoint (/v1/image_upload/note_eyecatch) returns
-    # only 'url' in the response, not 'key'. This is expected behavior based on
-    # API testing - body images (via presigned_post) return 'key', eyecatch does not.
+    # Extract image URL from response (tries multiple field names)
+    image_url = _extract_image_url_from_response(response)
+
+    image_data = response.get("data", {})
     image_key = image_data.get("key")
 
-    image_url = image_data.get("url")
+    # URL is optional - eyecatch API may not always return it
+    # The eyecatch is set server-side even without a URL in the response
     if not image_url:
-        raise NoteAPIError(
-            code=ErrorCode.API_ERROR,
-            message="Image upload failed: API response missing required field 'url'",
-            details={"response": response},
+        logger.warning(
+            "Image upload response missing image URL for note_id=%s. Response keys: top=%s, data=%s",
+            numeric_note_id,
+            list(response.keys()),
+            list(image_data.keys()) if image_data else "none",
         )
 
     return Image(
         key=str(image_key) if image_key else None,
-        url=str(image_url),
+        url=str(image_url) if image_url else "",
         original_path=file_path,
         size_bytes=file_size,
         uploaded_at=int(time.time()),

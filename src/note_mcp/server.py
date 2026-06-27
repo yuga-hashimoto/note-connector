@@ -285,7 +285,9 @@ async def note_upload_eyecatch(
         アップロード結果（画像URLを含む）
     """
     image = await upload_eyecatch_image(session, file_path, note_id=note_id)
-    return f"アイキャッチ画像をアップロードしました。URL: {image.url}"
+    if image.url:
+        return f"アイキャッチ画像をアップロードしました。URL: {image.url}"
+    return "アイキャッチ画像をアップロードしました。"
 
 
 @mcp.tool()
@@ -319,7 +321,9 @@ async def note_set_eyecatch_base64(
         mime_type=mime_type,
         image_base64=image_base64,
     )
-    return f"アイキャッチ画像を設定しました。URL: {image.url}"
+    if image.url:
+        return f"アイキャッチ画像を設定しました。URL: {image.url}"
+    return "アイキャッチ画像を設定しました。"
 
 
 @mcp.tool()
