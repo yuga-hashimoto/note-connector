@@ -1,13 +1,19 @@
 """Image upload operations for note.com API.
 
 Provides functionality for uploading images to note.com.
-Supports both eyecatch (header) images and body (inline) images.
+Supports both eyecatch (header) images and body (inline) images,
+as well as base64-encoded image uploads.
 """
 
 from __future__ import annotations
 
+import base64
+import binascii
+import contextlib
 import logging
+import os
 import re
+import tempfile
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -88,6 +94,26 @@ CONTENT_TYPE_MAP: dict[str, str] = {
 IMAGE_UPLOAD_ENDPOINTS: dict[ImageType, str] = {
     ImageType.EYECATCH: "/v1/image_upload/note_eyecatch",
     ImageType.BODY: "/v1/image_upload/note_eyecatch",  # Same endpoint - URL works for body embedding
+}
+
+# Supported MIME types for base64 image upload
+SUPPORTED_MIME_TYPES: set[str] = {"image/png", "image/jpeg", "image/webp", "image/gif"}
+
+# Mapping from MIME type to file extension
+MIME_TO_EXTENSION: dict[str, str] = {
+    "image/png": ".png",
+    "image/jpeg": ".jpg",
+    "image/webp": ".webp",
+    "image/gif": ".gif",
+}
+
+# Magic bytes for image format detection
+# (signature, offset) - signature is checked at the given offset
+_MAGIC_BYTES: dict[str, tuple[bytes, int]] = {
+    "image/png": (b"\x89PNG\r\n\x1a\n", 0),
+    "image/jpeg": (b"\xff\xd8\xff", 0),
+    "image/gif": (b"GIF8", 0),
+    "image/webp": (b"WEBP", 8),
 }
 
 
@@ -454,3 +480,181 @@ async def insert_image_via_api(
         "caption": caption,
         "fallback_used": False,  # No fallback in API-only mode
     }
+
+
+# =============================================================================
+# Base64 Image Upload
+# =============================================================================
+
+_DATA_URL_PREFIX_RE = re.compile(r"^data:.*?;base64,")
+
+
+def _strip_data_url_prefix(image_base64: str) -> str:
+    """Strip data URL prefix from a base64 string if present.
+
+    Handles inputs like:
+        data:image/png;base64,iVBORw0KGgo...
+        iVBORw0KGgo... (plain base64)
+
+    Args:
+        image_base64: Raw or data-URL-prefixed base64 string
+
+    Returns:
+        Clean base64 string without the prefix
+    """
+    match = _DATA_URL_PREFIX_RE.match(image_base64)
+    if match:
+        return image_base64[match.end() :]
+    return image_base64
+
+
+def _decode_base64_image(image_base64: str) -> bytes:
+    """Decode a base64 string to image bytes.
+
+    Args:
+        image_base64: Base64-encoded image data (with or without data URL prefix)
+
+    Returns:
+        Decoded image bytes
+
+    Raises:
+        NoteAPIError: If base64 decoding fails
+    """
+    clean = _strip_data_url_prefix(image_base64)
+
+    if not clean.strip():
+        raise NoteAPIError(
+            code=ErrorCode.INVALID_BASE64,
+            message="image_base64 が空です。",
+        )
+
+    try:
+        return base64.b64decode(clean, validate=True)
+    except (binascii.Error, ValueError) as e:
+        raise NoteAPIError(
+            code=ErrorCode.INVALID_BASE64,
+            message="image_base64 のデコードに失敗しました。",
+            details={"error": str(e)},
+        ) from e
+
+
+def _validate_mime_type(mime_type: str) -> None:
+    """Validate that the MIME type is supported.
+
+    Args:
+        mime_type: MIME type string (e.g., "image/png")
+
+    Raises:
+        NoteAPIError: If the MIME type is not supported
+    """
+    if mime_type not in SUPPORTED_MIME_TYPES:
+        raise NoteAPIError(
+            code=ErrorCode.UNSUPPORTED_MIME_TYPE,
+            message=(f"未対応のMIME typeです: {mime_type}。対応形式: {', '.join(sorted(SUPPORTED_MIME_TYPES))}"),
+            details={"mime_type": mime_type},
+        )
+
+
+def _validate_image_bytes(data: bytes, mime_type: str) -> None:
+    """Validate that decoded bytes represent a valid image.
+
+    Checks:
+    - Data is not empty
+    - Magic bytes match the declared MIME type
+    - Size is within limits
+
+    Args:
+        data: Raw image bytes
+        mime_type: Declared MIME type
+
+    Raises:
+        NoteAPIError: If validation fails
+    """
+    if not data:
+        raise NoteAPIError(
+            code=ErrorCode.INVALID_IMAGE,
+            message="デコードされた画像データが空です。",
+        )
+
+    # Size check
+    if len(data) > MAX_FILE_SIZE:
+        raise NoteAPIError(
+            code=ErrorCode.IMAGE_TOO_LARGE,
+            message=(f"画像サイズ ({len(data)} bytes) が上限 ({MAX_FILE_SIZE} bytes) を超えています。"),
+            details={"size": len(data), "max_size": MAX_FILE_SIZE},
+        )
+
+    # Magic byte check
+    magic_info = _MAGIC_BYTES.get(mime_type)
+    if magic_info is not None:
+        signature, offset = magic_info
+        if len(data) < offset + len(signature):
+            raise NoteAPIError(
+                code=ErrorCode.INVALID_IMAGE,
+                message="画像データが短すぎて形式を判別できません。",
+                details={"mime_type": mime_type, "size": len(data)},
+            )
+        if data[offset : offset + len(signature)] != signature:
+            raise NoteAPIError(
+                code=ErrorCode.INVALID_IMAGE,
+                message=f"宣言されたMIME type ({mime_type}) と実画像形式が一致しません。",
+                details={"mime_type": mime_type},
+            )
+
+
+async def upload_eyecatch_base64(
+    session: Session,
+    note_id: str,
+    mime_type: str,
+    image_base64: str,
+) -> Image:
+    """Upload an eyecatch image from base64-encoded data.
+
+    Decodes base64 image data, validates it, writes to a temporary file,
+    and uploads via the standard image upload flow. The temporary file is
+    cleaned up after upload (success or failure).
+
+    Args:
+        session: Authenticated session
+        note_id: The note ID to associate the image with (numeric or key format)
+        mime_type: MIME type of the image (e.g., "image/png")
+        image_base64: Base64-encoded image data (with or without data URL prefix)
+
+    Returns:
+        Image object with upload result
+
+    Raises:
+        NoteAPIError: If validation fails or API request fails
+    """
+    # Step 1: Validate MIME type
+    _validate_mime_type(mime_type)
+
+    # Step 2: Decode base64
+    image_bytes = _decode_base64_image(image_base64)
+
+    # Step 3: Validate image bytes
+    _validate_image_bytes(image_bytes, mime_type)
+
+    # Step 4: Determine file extension
+    extension = MIME_TO_EXTENSION.get(mime_type, ".bin")
+
+    # Step 5: Write to temp file and upload
+    tmp_path: str | None = None
+    try:
+        fd, tmp_path = tempfile.mkstemp(suffix=extension)
+        os.close(fd)
+
+        with open(tmp_path, "wb") as f:
+            f.write(image_bytes)
+
+        image = await _upload_image_internal(
+            session=session,
+            file_path=tmp_path,
+            note_id=note_id,
+            image_type=ImageType.EYECATCH,
+        )
+        return image
+    finally:
+        if tmp_path is not None:
+            with contextlib.suppress(OSError):
+                os.unlink(tmp_path)

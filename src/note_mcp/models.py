@@ -211,6 +211,11 @@ class ErrorCode(str, Enum):
     API_ERROR = "api_error"
     UPLOAD_FAILED = "upload_failed"
     INVALID_INPUT = "invalid_input"
+    INVALID_BASE64 = "invalid_base64"
+    UNSUPPORTED_MIME_TYPE = "unsupported_mime_type"
+    INVALID_IMAGE = "invalid_image"
+    IMAGE_TOO_LARGE = "image_too_large"
+    EYECATCH_SET_FAILED = "eyecatch_set_failed"
 
 
 class NoteAPIError(Exception):

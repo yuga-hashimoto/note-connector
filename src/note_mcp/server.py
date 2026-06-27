@@ -22,7 +22,12 @@ from note_mcp.api.articles import (
     unpublish_article,
     update_article,
 )
-from note_mcp.api.images import insert_image_via_api, upload_body_image, upload_eyecatch_image
+from note_mcp.api.images import (
+    insert_image_via_api,
+    upload_body_image,
+    upload_eyecatch_base64,
+    upload_eyecatch_image,
+)
 from note_mcp.api.preview import get_preview_html
 from note_mcp.auth.browser import login_with_browser
 from note_mcp.auth.session import SessionManager
@@ -281,6 +286,40 @@ async def note_upload_eyecatch(
     """
     image = await upload_eyecatch_image(session, file_path, note_id=note_id)
     return f"アイキャッチ画像をアップロードしました。URL: {image.url}"
+
+
+@mcp.tool()
+@require_session
+@handle_api_error
+async def note_set_eyecatch_base64(
+    session: Session,
+    note_id: Annotated[str, "アイキャッチ画像を設定する記事のID（数値IDまたは記事キー n... 形式）"],
+    mime_type: Annotated[str, "画像のMIMEタイプ（image/png, image/jpeg, image/webp など）"],
+    image_base64: Annotated[str, "base64エンコードされた画像データ（data:image/...;base64, 形式も可）"],
+) -> str:
+    """base64画像データから記事のアイキャッチ画像を設定します。
+
+    ChatGPTなどで生成した画像をbase64形式で直接渡すことで、
+    ファイルパスを必要とせずにnote記事のサムネイル/見出し画像を設定できます。
+
+    対応形式: PNG, JPEG, WebP, GIF
+    最大サイズ: 10MB
+
+    Args:
+        note_id: アイキャッチ画像を設定する記事のID（数値IDまたは記事キー n... 形式）
+        mime_type: 画像のMIMEタイプ
+        image_base64: base64エンコードされた画像データ
+
+    Returns:
+        設定結果（画像URLを含む）
+    """
+    image = await upload_eyecatch_base64(
+        session=session,
+        note_id=note_id,
+        mime_type=mime_type,
+        image_base64=image_base64,
+    )
+    return f"アイキャッチ画像を設定しました。URL: {image.url}"
 
 
 @mcp.tool()
