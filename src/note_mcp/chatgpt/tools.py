@@ -2,17 +2,14 @@
 
 from __future__ import annotations
 
-import os
-from pathlib import Path
 from typing import Annotated, Any
 
 from fastmcp import FastMCP
 
 from note_mcp.api.articles import create_draft, delete_article, list_articles, unpublish_article
-from note_mcp.api.images import insert_image_via_api
+from note_mcp.api.openai_file_images import insert_body_image_from_file_param
 from note_mcp.api.public_notes import fetch_public_article, search_public_notes
 from note_mcp.auth.session import SessionManager
-from note_mcp.chatgpt.images import materialize_image_input
 from note_mcp.chatgpt.widgets import (
     ARTICLE_PANEL_URI,
     HOME_URI,
@@ -82,92 +79,59 @@ def register_chatgpt_tools(mcp: FastMCP, session_manager: SessionManager) -> Non
             "authenticated": True,
         }
 
-    @mcp.tool()
-    async def note_attach_image(
-        article_key: Annotated[str, "記事キー（n... 形式）"],
-        mime_type: Annotated[str, "image/png など"],
-        image_base64: Annotated[str | None, "Base64画像データ"] = None,
-        image_url: Annotated[str | None, "画像URL"] = None,
-        caption: Annotated[str | None, "キャプション"] = None,
-    ) -> str:
-        """ChatGPT生成画像を記事に挿入します（base64 または URL）。"""
-        session = session_manager.load()
-        if session is None or session.is_expired():
-            return "セッションが無効です。note_loginでログインしてください。"
-
-        work_dir = Path(os.environ.get("NOTE_CONNECTOR_WORK_DIR", "/tmp/note-connector"))
-        try:
-            file_path = await materialize_image_input(
-                work_dir,
-                image_base64=image_base64,
-                image_url=image_url,
-                mime_type=mime_type,
-            )
-            result = await insert_image_via_api(
-                session=session,
-                article_id=article_key,
-                file_path=str(file_path),
-                caption=caption,
-            )
-        except (ValueError, NoteAPIError, OSError) as exc:
-            return f"画像挿入に失敗しました: {exc}"
-
-        return f"画像を挿入しました。記事キー: {result['article_key']}\n画像URL: {result['image_url']}"
-
-    @mcp.tool()
+    @mcp.tool(
+        meta={
+            "openai/fileParams": ["images"],
+            "openai/toolInvocation/invoking": "Creating draft with images…",
+            "openai/toolInvocation/invoked": "Draft created with images",
+        }
+    )
     async def note_create_draft_with_images(
         title: Annotated[str, "記事タイトル"],
         body: Annotated[str, "本文（Markdown）"],
         tags: Annotated[list[str] | None, "タグ"] = None,
         images: Annotated[
-            list[dict[str, str]] | None,
-            "画像配列。各要素: mime_type, image_base64 または image_url",
+            list[dict[str, Any]] | None,
+            (
+                "Apps SDK file referenceの配列。"
+                "各要素は file reference object（download_url/file_id必須）。"
+                "captionキーでキャプションを指定可。"
+            ),
         ] = None,
-    ) -> str:
-        """下書き作成後、ChatGPT画像を本文に挿入します。"""
+    ) -> dict[str, Any]:
+        """下書きを作成し、Apps SDK file parameterの画像を本文に挿入します。"""
         session = session_manager.load()
         if session is None or session.is_expired():
-            return "セッションが無効です。note_loginでログインしてください。"
+            return {"ok": False, "error": "セッションが無効です。note_loginでログインしてください。"}
 
         article_input = ArticleInput(title=title, body=body, tags=tags or [])
         try:
             article = await create_draft(session, article_input)
         except NoteAPIError as exc:
-            return f"下書き作成に失敗しました: {exc}"
+            return {"ok": False, "error": str(exc)}
 
         inserted = 0
-        errors: list[str] = []
-        work_dir = Path(os.environ.get("NOTE_CONNECTOR_WORK_DIR", "/tmp/note-connector"))
+        errors: list[dict[str, Any]] = []
         for index, image_spec in enumerate(images or []):
-            mime = image_spec.get("mime_type", "image/png")
-            b64 = image_spec.get("image_base64")
-            url = image_spec.get("image_url")
             caption = image_spec.get("caption")
             try:
-                file_path = await materialize_image_input(
-                    work_dir,
-                    image_base64=b64,
-                    image_url=url,
-                    mime_type=mime,
-                )
-                await insert_image_via_api(
+                await insert_body_image_from_file_param(
                     session=session,
                     article_id=article.key,
-                    file_path=str(file_path),
+                    image_file=image_spec,
                     caption=caption,
                 )
                 inserted += 1
-            except (ValueError, NoteAPIError, OSError) as exc:
-                errors.append(f"image[{index}]: {exc}")
+            except (ValueError, NoteAPIError) as exc:
+                errors.append({"index": index, "error": str(exc)})
 
-        lines = [
-            f"下書きを作成しました。ID: {article.id}、キー: {article.key}",
-            f"挿入した画像: {inserted}件",
-        ]
-        if errors:
-            lines.append("画像エラー:")
-            lines.extend(f"  - {e}" for e in errors)
-        return "\n".join(lines)
+        return {
+            "ok": True,
+            "article_id": article.id,
+            "article_key": article.key,
+            "inserted": inserted,
+            "errors": errors,
+        }
 
     @mcp.tool(annotations={"readOnlyHint": True})
     async def note_search_public_articles(

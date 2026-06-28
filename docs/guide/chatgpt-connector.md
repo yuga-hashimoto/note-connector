@@ -28,4 +28,4 @@ OpenAI [Developer mode](https://platform.openai.com/docs/guides/developer-mode) 
 
 ## ツール
 
-ChatGPT 専用: `note_ui_status`, `note_ui_list_articles`, `note_attach_image`, `note_create_draft_with_images` ほか従来の `note_*` 一式。
+ChatGPT 専用: `note_ui_status`, `note_ui_list_articles`, `note_insert_body_image`, `note_set_eyecatch_image_file`, `note_create_draft_with_images` ほか従来の `note_*` 一式。

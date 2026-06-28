@@ -47,8 +47,7 @@
 | note_create_draft | 下書き作成 | P1 |
 | note_get_article | 記事取得 | P1 |
 | note_update_article | 記事更新 | P1 |
-| note_upload_eyecatch | アイキャッチ画像アップロード | P2 |
-| note_upload_body_image | 本文画像アップロード | P2 |
+| note_set_eyecatch_image_file | アイキャッチ画像設定 | P2 |
 | note_insert_body_image | 本文画像挿入 | P2 |
 | note_show_preview | プレビュー表示 | P1 |
 | note_list_articles | 記事一覧取得 | P1 |
@@ -167,9 +166,8 @@
 
 **Acceptance Scenarios**:
 
-1. **Given** 作成済みの下書き記事と画像ファイル, **When** note_upload_eyecatchを呼び出す, **Then** アイキャッチ画像が設定される
-2. **Given** 作成済みの下書き記事と画像ファイル, **When** note_upload_body_imageを呼び出す, **Then** 本文用画像がアップロードされURLが返される
-3. **Given** 作成済みの下書き記事と画像ファイル, **When** note_insert_body_imageを呼び出す, **Then** 本文に画像が挿入される
+1. **Given** 作成済みの下書き記事, **When** note_set_eyecatch_image_fileを呼び出す, **Then** アイキャッチ画像が設定される
+2. **Given** 作成済みの下書き記事, **When** note_insert_body_imageを呼び出す, **Then** 本文に画像が挿入される
 
 ---
 

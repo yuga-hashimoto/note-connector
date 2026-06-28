@@ -1,6 +1,7 @@
 # 画像操作
 
-note-mcpでは、記事の画像を3つの方法で操作できます。
+note-mcpでは、ChatGPTが生成・アップロードした画像を Apps SDK file parameter 経由で note.com に転送します。
+すべての画像操作ツールはこの方式で動作し、`file_path` や `base64` の受け渡しは不要です。
 
 ## サポートされる形式
 
@@ -15,94 +16,82 @@ note-mcpでは、記事の画像を3つの方法で操作できます。
 
 ## アイキャッチ画像
 
-`note_upload_eyecatch`ツールで記事の見出し（アイキャッチ）画像をアップロードします。
+`note_set_eyecatch_image_file` ツールで記事の見出し（アイキャッチ）画像を設定します。
+ChatGPTが生成した画像を Apps SDK file parameter として受け取り、note.com にアップロードします。
+アイキャッチ画像は note 推奨サイズ（1280×670）に自動リサイズされます。
 
 ```
-記事ID 12345678 にアイキャッチ画像をアップロードしてください:
-/path/to/header.jpg
+記事 n1234567890ab のアイキャッチ画像を設定してください
+（画像はChatGPTが生成したものをfile parameterで渡します）
 ```
-
-アップロードした画像は自動的に記事の見出し画像として設定されます。
 
 ### パラメータ
 
 | パラメータ | 説明 |
 |-----------|------|
-| `file_path` | アップロードする画像ファイルのパス |
-| `note_id` | 画像を関連付ける記事のID（数字のみ） |
+| `note_id` | noteの記事ID、または n... 形式の記事キー |
+| `image_file` | Apps SDK file reference（download_url/file_id必須） |
 
-## 本文用画像のアップロード
+### 戻り値
 
-`note_upload_body_image`ツールで本文埋め込み用の画像をアップロードします。
-
-```
-記事ID 12345678 に本文用画像をアップロードしてください:
-/path/to/figure.png
-```
-
-**重要**: このツールは画像をアップロードしてURLを返すだけです。画像を記事に直接挿入するには`note_insert_body_image`を使用してください。
-
-### パラメータ
-
-| パラメータ | 説明 |
-|-----------|------|
-| `file_path` | アップロードする画像ファイルのパス |
-| `note_id` | 画像を関連付ける記事のID（数字のみ） |
-
-### レスポンス例
-
-```
-本文用画像をアップロードしました。URL: https://assets.st-note.com/...
-※画像を記事に直接挿入するには note_insert_body_image を使用してください。
+```json
+{"ok": true, "data": {"note_id": "...", "article_url": "...", "eyecatch_url": "..."}}
 ```
 
 ## 本文への画像挿入
 
-`note_insert_body_image`ツールで画像を記事本文に直接挿入します。
+`note_insert_body_image` ツールで画像を記事本文に直接挿入します。
+ChatGPTが生成した画像を Apps SDK file parameter として受け取り、
+API経由で画像をアップロードした後、ProseMirrorで直接挿入します。
 
 ```
-記事ID 12345678 に画像を挿入してください:
-/path/to/diagram.png
+記事 n1234567890ab に画像を挿入してください
 キャプション: 図1. システム構成図
+（画像はChatGPTが生成したものをfile parameterで渡します）
 ```
 
 ### パラメータ
 
 | パラメータ | 説明 |
 |-----------|------|
-| `file_path` | 挿入する画像ファイルのパス |
-| `article_id` | 画像を挿入する記事のID（数字またはキー形式） |
+| `article_id` | 画像を挿入する記事のキー（n... 形式） |
+| `image_file` | Apps SDK file reference（download_url/file_id必須） |
 | `caption` | 画像のキャプション（オプション） |
 
-### 動作
+### 戻り値
 
-API経由で画像を挿入します（ブラウザ不要）:
+```json
+{"ok": true, "article_id": "...", "article_key": "...", "image_url": "..."}
+```
 
-1. 画像ファイルをS3にアップロード
-2. 記事の現在のHTML本文を取得
-3. 画像HTML（`<figure><img><figcaption>`）を生成
-4. 本文末尾に画像HTMLを追加
-5. `draft_save` APIで記事を保存
+## 下書き作成＋画像一括挿入
 
-### 特徴
+`note_create_draft_with_images` ツールで下書き作成と画像挿入を一度に行います。
 
-| 項目 | 値 |
-|------|-----|
-| 実行時間 | 1-2秒 |
-| 成功率 | ~99% |
-| ブラウザ依存 | なし |
+```
+タイトル「画像付き記事」、本文「...」で下書きを作成し、
+画像を挿入してください
+（画像はChatGPTが生成したものをfile parameterで渡します）
+```
 
-## 画像操作の比較
+### パラメータ
 
-| ツール | 用途 | 方法 |
-|--------|------|------|
-| `note_upload_eyecatch` | アイキャッチ画像 | API |
-| `note_upload_body_image` | 画像URLの取得 | API |
-| `note_insert_body_image` | 本文への画像挿入 | API |
+| パラメータ | 説明 |
+|-----------|------|
+| `title` | 記事タイトル |
+| `body` | 本文（Markdown） |
+| `tags` | タグ（オプション） |
+| `images` | Apps SDK file reference の配列 |
+
+### 戻り値
+
+```json
+{"ok": true, "article_id": "...", "article_key": "...", "inserted": 2, "errors": []}
+```
 
 ## 記事IDの確認
 
-画像操作には記事ID（数字のみ）が必要です。`note_list_articles`で記事一覧を取得し、IDを確認できます。
+画像操作には記事キー（n... 形式）が必要です。`note_list_articles` で記事一覧を取得し、キーを確認できます。
 
 ```
 記事一覧を取得してください
@@ -110,29 +99,15 @@ API経由で画像を挿入します（ブラウザ不要）:
 
 ## エラーハンドリング
 
-### ファイルが見つからない
+すべての画像ツールは `{"ok": false, "error": "..."}` 形式でエラーを返します。
 
-```
-File not found: /path/to/image.jpg
-```
-
-→ ファイルパスを確認してください
-
-### ファイル形式が無効
-
-```
-Invalid file format: .bmp. Allowed formats: .gif, .jpeg, .jpg, .png, .webp
-```
-
-→ サポートされる形式に変換してください
-
-### ファイルサイズ超過
-
-```
-File size (15000000 bytes) exceeds maximum allowed size (10485760 bytes)
-```
-
-→ 10MB以下に圧縮してください
+| エラー | 原因 |
+|--------|------|
+| 未認証 | `note_login` が必要 |
+| 画像形式無効 | サポートされる形式（JPEG/PNG/GIF/WebP）以外 |
+| ファイルサイズ超過 | 10MB超 |
+| SVG画像 | SVGは非対応 |
+| ダウンロード失敗 | file reference が無効または期限切れ |
 
 ## ワークフロー例
 
@@ -150,14 +125,12 @@ File size (15000000 bytes) exceeds maximum allowed size (10485760 bytes)
 
 3. アイキャッチ画像を設定：
    ```
-   記事ID 12345678 にアイキャッチ画像を設定:
-   /path/to/header.jpg
+   記事 n1234567890ab のアイキャッチ画像を設定してください
    ```
 
 4. 本文に画像を挿入：
    ```
-   記事ID 12345678 に画像を挿入:
-   /path/to/figure.png
+   記事 n1234567890ab に画像を挿入してください
    キャプション: 図1の説明
    ```
 

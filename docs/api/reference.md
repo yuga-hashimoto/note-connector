@@ -291,86 +291,73 @@ AIアシスタントと一緒に記事を書いてみましょう。
 
 ## 画像ツール
 
-### note_upload_eyecatch
+### note_set_eyecatch_image_file
 
-記事のアイキャッチ（見出し）画像をアップロードします。
-
-```
-記事ID 12345678 にアイキャッチ画像をアップロードしてください:
-/path/to/header.jpg
-```
-
-**パラメータ**
-
-| 名前 | 型 | 必須 | 説明 |
-|------|-----|------|------|
-| `file_path` | str | はい | アップロードする画像ファイルのパス |
-| `note_id` | str | はい | 画像を関連付ける記事のID（数字のみ） |
-
-**サポート形式**: JPEG, PNG, GIF, WebP（最大10MB）
-
-**戻り値**
+ChatGPT/Apps SDK file parameter の画像を記事アイキャッチに設定します。
 
 ```
-アイキャッチ画像をアップロードしました。URL: https://assets.st-note.com/...
-```
-
----
-
-### note_upload_body_image
-
-記事本文内に埋め込む画像をアップロードします。
-
-```
-記事ID 12345678 に本文用画像をアップロードしてください:
-/path/to/figure.png
+記事 n1234567890ab にアイキャッチ画像を設定してください
+（画像は ChatGPT が生成したものを file parameter で受け渡します）
 ```
 
 **パラメータ**
 
 | 名前 | 型 | 必須 | 説明 |
 |------|-----|------|------|
-| `file_path` | str | はい | アップロードする画像ファイルのパス |
-| `note_id` | str | はい | 画像を関連付ける記事のID（数字のみ） |
-
-**重要**: このツールは画像をアップロードしてURLを返すだけです。画像を記事に直接挿入するには`note_insert_body_image`を使用してください。
+| `note_id` | str | はい | noteの記事ID、または n... 形式の記事キー |
+| `image_file` | object | はい | Apps SDK file reference（download_url/file_id必須） |
 
 **戻り値**
 
-```
-本文用画像をアップロードしました。URL: https://assets.st-note.com/...
-
-※画像を記事に直接挿入するには note_insert_body_image を使用してください。
+```json
+{"ok": true, "data": {"note_id": "...", "article_url": "...", "eyecatch_url": "...", "file_id": "..."}}
 ```
 
 ---
 
 ### note_insert_body_image
 
-記事本文内に画像を直接挿入します。
+ChatGPT/Apps SDK file parameter の画像を記事本文に直接挿入します。
 
 ```
-記事ID n1234567890ab に画像を挿入してください:
-/path/to/diagram.png
+記事 n1234567890ab に画像を挿入してください
 キャプション: 図1. システム構成図
+（画像は ChatGPT が生成したものを file parameter で受け渡します）
 ```
 
 **パラメータ**
 
 | 名前 | 型 | 必須 | 説明 |
 |------|-----|------|------|
-| `file_path` | str | はい | 挿入する画像ファイルのパス |
-| `article_id` | str | はい | 画像を挿入する記事のID（数値またはキー形式） |
+| `article_id` | str | はい | 画像を挿入する記事のキー（n... 形式） |
+| `image_file` | object | はい | Apps SDK file reference（download_url/file_id必須） |
 | `caption` | str | いいえ | 画像のキャプション |
-
-**動作**
-
-API経由で画像をアップロードし、記事本文に直接挿入します。
 
 **戻り値**
 
+```json
+{"ok": true, "article_id": "...", "article_key": "...", "image_url": "...", "file_id": "..."}
 ```
-画像を挿入しました。記事ID: n1234567890ab、キャプション: 図1. システム構成図
+
+---
+
+### note_create_draft_with_images
+
+下書きを作成し、Apps SDK file parameter の画像を本文に挿入します。
+
+**パラメータ**
+
+| 名前 | 型 | 必須 | 説明 |
+|------|-----|------|------|
+| `title` | str | はい | 記事タイトル |
+| `body` | str | はい | 本文（Markdown） |
+| `tags` | list[str] | いいえ | タグ |
+| `images` | list[object] | いいえ | Apps SDK file referenceの配列 |
+
+**戻り値**
+
+```json
+{"ok": true, "article_id": "...", "article_key": "...", "inserted": 2, "errors": []}
 ```
 
 ---

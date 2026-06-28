@@ -15,5 +15,5 @@
 ## Delivered
 
 - Tunnel: tailscale (default), ngrok, custom `tunnel.publicUrl`
-- Tools: `note_attach_image`, `note_create_draft_with_images`, `note_ui_*`
+- Tools: `note_insert_body_image`, `note_set_eyecatch_image_file`, `note_create_draft_with_images`, `note_ui_*`
 - Widgets: home + article panel (`ui://note-connector/*`)

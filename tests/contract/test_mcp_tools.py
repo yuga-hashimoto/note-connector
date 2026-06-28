@@ -192,38 +192,6 @@ class TestToolSchemas:
             f"missing={expected_required - actual_required}"
         )
 
-    def test_note_upload_eyecatch_tool_exists(self) -> None:
-        """Test that note_upload_eyecatch tool is registered."""
-        tools = get_tools()
-        assert "note_upload_eyecatch" in tools
-
-    def test_note_upload_eyecatch_schema(self) -> None:
-        """Test note_upload_eyecatch tool schema matches exactly."""
-        tools = get_tools()
-        upload_tool = tools["note_upload_eyecatch"]
-
-        assert upload_tool.parameters is not None
-        schema = upload_tool.parameters
-        assert "properties" in schema
-
-        # Exact properties match
-        expected_properties = {"file_path", "note_id"}
-        actual_properties = set(schema.get("properties", {}).keys())
-        assert actual_properties == expected_properties, (
-            f"Schema mismatch: "
-            f"extra={actual_properties - expected_properties}, "
-            f"missing={expected_properties - actual_properties}"
-        )
-
-        # Exact required match
-        expected_required = {"file_path", "note_id"}
-        actual_required = set(schema.get("required", []))
-        assert actual_required == expected_required, (
-            f"Required mismatch: "
-            f"extra={actual_required - expected_required}, "
-            f"missing={expected_required - actual_required}"
-        )
-
     def test_note_set_eyecatch_image_file_tool_exists(self) -> None:
         """Test that note_set_eyecatch_image_file tool is registered."""
         tools = get_tools()
@@ -257,38 +225,6 @@ class TestToolSchemas:
             "openai/toolInvocation/invoking": "Uploading eyecatch image…",
             "openai/toolInvocation/invoked": "Eyecatch image set",
         }
-
-    def test_note_upload_body_image_tool_exists(self) -> None:
-        """Test that note_upload_body_image tool is registered."""
-        tools = get_tools()
-        assert "note_upload_body_image" in tools
-
-    def test_note_upload_body_image_schema(self) -> None:
-        """Test note_upload_body_image tool schema matches exactly."""
-        tools = get_tools()
-        upload_tool = tools["note_upload_body_image"]
-
-        assert upload_tool.parameters is not None
-        schema = upload_tool.parameters
-        assert "properties" in schema
-
-        # Exact properties match
-        expected_properties = {"file_path", "note_id"}
-        actual_properties = set(schema.get("properties", {}).keys())
-        assert actual_properties == expected_properties, (
-            f"Schema mismatch: "
-            f"extra={actual_properties - expected_properties}, "
-            f"missing={expected_properties - actual_properties}"
-        )
-
-        # Exact required match
-        expected_required = {"file_path", "note_id"}
-        actual_required = set(schema.get("required", []))
-        assert actual_required == expected_required, (
-            f"Required mismatch: "
-            f"extra={actual_required - expected_required}, "
-            f"missing={expected_required - actual_required}"
-        )
 
     def test_note_show_preview_tool_exists(self) -> None:
         """Test that note_show_preview tool is registered."""
@@ -432,8 +368,7 @@ class TestToolSchemas:
         schema = insert_tool.parameters
         assert "properties" in schema
 
-        # Exact properties match
-        expected_properties = {"file_path", "article_id", "caption"}
+        expected_properties = {"article_id", "image_file", "caption"}
         actual_properties = set(schema.get("properties", {}).keys())
         assert actual_properties == expected_properties, (
             f"Schema mismatch: "
@@ -441,14 +376,25 @@ class TestToolSchemas:
             f"missing={expected_properties - actual_properties}"
         )
 
-        # Exact required match
-        expected_required = {"file_path", "article_id"}
+        expected_required = {"article_id", "image_file"}
         actual_required = set(schema.get("required", []))
         assert actual_required == expected_required, (
             f"Required mismatch: "
             f"extra={actual_required - expected_required}, "
             f"missing={expected_required - actual_required}"
         )
+        assert schema["properties"]["image_file"]["type"] == "object"
+
+    def test_note_insert_body_image_meta(self) -> None:
+        """Test metadata for image file input."""
+        tools = get_tools()
+        upload_tool = tools["note_insert_body_image"]
+
+        assert upload_tool.meta == {
+            "openai/fileParams": ["image_file"],
+            "openai/toolInvocation/invoking": "Inserting body image…",
+            "openai/toolInvocation/invoked": "Body image inserted",
+        }
 
     def test_note_create_from_file_tool_exists(self) -> None:
         """Test that note_create_from_file tool is registered."""
@@ -475,36 +421,6 @@ class TestToolSchemas:
 
         # Exact required match
         expected_required = {"file_path"}
-        actual_required = set(schema.get("required", []))
-        assert actual_required == expected_required, (
-            f"Required mismatch: "
-            f"extra={actual_required - expected_required}, "
-            f"missing={expected_required - actual_required}"
-        )
-
-    def test_note_set_eyecatch_base64_chunked_tool_exists(self) -> None:
-        """Test that note_set_eyecatch_base64_chunked tool is registered."""
-        tools = get_tools()
-        assert "note_set_eyecatch_base64_chunked" in tools
-
-    def test_note_set_eyecatch_base64_chunked_schema(self) -> None:
-        """Test note_set_eyecatch_base64_chunked tool schema matches exactly."""
-        tools = get_tools()
-        set_tool = tools["note_set_eyecatch_base64_chunked"]
-
-        assert set_tool.parameters is not None
-        schema = set_tool.parameters
-        assert "properties" in schema
-
-        expected_properties = {"upload_id", "note_id", "mime_type", "chunk", "chunk_index", "total_chunks"}
-        actual_properties = set(schema.get("properties", {}).keys())
-        assert actual_properties == expected_properties, (
-            f"Schema mismatch: "
-            f"extra={actual_properties - expected_properties}, "
-            f"missing={expected_properties - actual_properties}"
-        )
-
-        expected_required = {"upload_id", "note_id", "mime_type", "chunk", "chunk_index", "total_chunks"}
         actual_required = set(schema.get("required", []))
         assert actual_required == expected_required, (
             f"Required mismatch: "
@@ -578,9 +494,6 @@ class TestRequireSessionTools:
     """
 
     REQUIRE_SESSION_TOOLS = [
-        "note_upload_eyecatch",
-        "note_upload_body_image",
-        "note_set_eyecatch_base64_chunked",
         "note_show_preview",
         "note_get_preview_html",
     ]

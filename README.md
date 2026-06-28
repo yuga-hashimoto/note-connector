@@ -74,8 +74,9 @@ Tailscale Funnel または [ngrok 固定ドメイン](docs/development/release.m
 | `note_update_article` | 記事の内容・タイトル・タグ更新 |
 | `note_delete_draft` / `note_delete_article` | 下書き削除 / 公開記事も削除可 |
 | `note_unpublish_article` | 公開記事を下書きに戻す |
-| `note_upload_eyecatch` | サムネイル（アイキャッチ画像）登録 |
-| `note_attach_image` / `note_create_draft_with_images` | ChatGPT 生成画像の投稿 |
+| `note_set_eyecatch_image_file` | ChatGPT画像をアイキャッチに設定（Apps SDK file parameter） |
+| `note_insert_body_image` | ChatGPT画像を本文に挿入（Apps SDK file parameter） |
+| `note_create_draft_with_images` | 下書き作成＋画像一括挿入（Apps SDK file parameter） |
 | `note_ui_status` / `note_ui_list_articles` | Apps SDK ウィジェット |
 | `note_search_public_articles` | 他人の公開記事をキーワード検索 |
 | `note_fetch_public_article` | 公開 URL またはキーで記事取得 |

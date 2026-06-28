@@ -23,12 +23,13 @@ from note_mcp.api.articles import (
     update_article,
 )
 from note_mcp.api.images import (
- insert_image_via_api,
- upload_body_image,
- upload_eyecatch_chunked,
- upload_eyecatch_image,
+    upload_body_image,
+    upload_eyecatch_image,
 )
-from note_mcp.api.openai_file_images import set_eyecatch_from_openai_file_param
+from note_mcp.api.openai_file_images import (
+    insert_body_image_from_file_param,
+    set_eyecatch_from_openai_file_param,
+)
 from note_mcp.api.preview import get_preview_html
 from note_mcp.auth.browser import login_with_browser
 from note_mcp.auth.session import SessionManager
@@ -262,92 +263,6 @@ async def note_update_article(
     return f"記事を更新しました。ID: {article.id}{tag_info}"
 
 
-@mcp.tool()
-@require_session
-@handle_api_error
-async def note_upload_eyecatch(
-    session: Session,
-    file_path: Annotated[str, "アップロードする画像ファイルのパス"],
-    note_id: Annotated[str, "画像を関連付ける記事のID（数字のみ）"],
-) -> str:
-    """記事のアイキャッチ（見出し）画像をアップロードします。
-
-    JPEG、PNG、GIF、WebP形式の画像をアップロードできます。
-    最大ファイルサイズは10MBです。
-    アップロードした画像は記事の見出し画像として設定されます。
-
-    note_list_articlesで記事一覧を取得し、IDを確認できます。
-
-    Args:
-        file_path: アップロードする画像ファイルのパス
-        note_id: 画像を関連付ける記事のID
-
-    Returns:
-        アップロード結果（画像URLを含む）
-    """
-    image = await upload_eyecatch_image(session, file_path, note_id=note_id)
-    if image.url:
-        return f"アイキャッチ画像をアップロードしました。URL: {image.url}"
-    return "アイキャッチ画像をアップロードしました。"
-
-
-@mcp.tool()
-@require_session
-@handle_api_error
-async def note_set_eyecatch_base64_chunked(
-    session: Session,
-    upload_id: Annotated[str, "アップロードセッションを識別する一意なID（UUID推奨）"],
-    note_id: Annotated[str, "アイキャッチ画像を設定する記事のID（数値IDまたは記事キー n... 形式）"],
-    mime_type: Annotated[str, "画像のMIMEタイプ（image/png, image/jpeg, image/webp など）"],
-    chunk: Annotated[str, "base64エンコードされた画像データのチャンク"],
-    chunk_index: Annotated[int, "このチャンクの0ベースのインデックス"],
-    total_chunks: Annotated[int, "全チャンク数"],
-) -> str:
-    """base64画像を分割（チャンク）で送信し、アイキャッチ画像を設定します。
-
-    大きなbase64画像をChatGPT経由で安全に転送するためのツールです。
-    base64文字列を複数チャンクに分割して順次送信し、全チャンクが
-    揃った時点で画像を組み立ててnote.comにアップロードします。
-
-    使い方:
-    1. ChatGPT側でbase64を分割（例: 50KBずつ）
-    2. upload_id（UUID）を生成
-    3. 各チャンクを note_set_eyecatch_base64_chunked で送信
-    4. 全チャンク送信後、自動的に画像が組み立てられアップロードされる
-
-    対応形式: PNG, JPEG, WebP, GIF
-    最大合計サイズ: 10MB
-    1チャンクあたり推奨サイズ: 64KB以下
-
-    Args:
-        upload_id: アップロードセッションの一意なID
-        note_id: アイキャッチ画像を設定する記事のID
-        mime_type: 画像のMIMEタイプ
-        chunk: base64エンコードされたチャンクデータ
-        chunk_index: このチャンクのインデックス（0始まり）
-        total_chunks: 全チャンク数
-
-    Returns:
-        中間チャンクでは受信状況、最終チャンクでは設定結果
-    """
-    image = await upload_eyecatch_chunked(
-        session=session,
-        upload_id=upload_id,
-        note_id=note_id,
-        mime_type=mime_type,
-        chunk=chunk,
-        chunk_index=chunk_index,
-        total_chunks=total_chunks,
-    )
-
-    if image is None:
-        return f"チャンク {chunk_index + 1}/{total_chunks} を受信しました。 upload_id: {upload_id}"
-
-    if image.url:
-        return f"アイキャッチ画像を設定しました。URL: {image.url}"
-    return "アイキャッチ画像を設定しました。"
-
-
 @mcp.tool(
     meta={
         "openai/fileParams": ["image_file"],
@@ -388,83 +303,46 @@ async def note_set_eyecatch_image_file(
         return {"ok": False, "error": {"code": e.code.value, "message": e.message}}
 
 
-@mcp.tool()
-@require_session
-@handle_api_error
-async def note_upload_body_image(
-    session: Session,
-    file_path: Annotated[str, "アップロードする画像ファイルのパス"],
-    note_id: Annotated[str, "画像を関連付ける記事のID（数字のみ）"],
-) -> str:
-    """記事本文内に埋め込む画像をアップロードします。
-
-    JPEG、PNG、GIF、WebP形式の画像をアップロードできます。
-    最大ファイルサイズは10MBです。
-
-    **重要**: このツールは画像をアップロードしてURLを返すだけです。
-    画像を記事に直接挿入するには note_insert_body_image を使用してください。
-
-    note_list_articlesで記事一覧を取得し、IDを確認できます。
-
-    Args:
-        file_path: アップロードする画像ファイルのパス
-        note_id: 画像を関連付ける記事のID
-
-    Returns:
-        アップロード結果（画像URLを含む）
-    """
-    image = await upload_body_image(session, file_path, note_id=note_id)
-    return (
-        f"本文用画像をアップロードしました。URL: {image.url}\n\n"
-        f"※画像を記事に直接挿入するには note_insert_body_image を使用してください。"
-    )
-
-
-@mcp.tool()
+@mcp.tool(
+    meta={
+        "openai/fileParams": ["image_file"],
+        "openai/toolInvocation/invoking": "Inserting body image…",
+        "openai/toolInvocation/invoked": "Body image inserted",
+    }
+)
 async def note_insert_body_image(
-    file_path: Annotated[str, "挿入する画像ファイルのパス"],
-    article_id: Annotated[str, "画像を挿入する記事のID（数値またはキー形式）"],
+    article_id: Annotated[str, "画像を挿入する記事のキー（n... 形式）"],
+    image_file: Annotated[
+        dict[str, Any],
+        (
+            'OpenAI Apps SDK file reference. Provided via _meta["openai/fileParams"]. '
+            "Contains download_url, file_id, mime_type, file_name."
+        ),
+    ],
     caption: Annotated[str | None, "画像のキャプション（オプション）"] = None,
-) -> str:
-    """記事本文内に画像を直接挿入します。
+) -> dict[str, Any]:
+    """ChatGPT/Apps SDK file parameterの画像を記事本文に直接挿入します。
 
-    API経由で画像をアップロードし、ProseMirrorで直接挿入します。
-    JPEG、PNG、GIF、WebP形式の画像を挿入できます。
-    最大ファイルサイズは10MBです。
-
-    note_list_articlesで記事一覧を取得し、IDを確認できます。
+    ChatGPTで生成された画像、またはChatGPTにアップロードされた画像を、
+    file_pathやbase64を介さずApps SDKのfile parameterとして受け取り、
+    API経由で画像をアップロードした後、ProseMirrorで直接挿入します。
 
     Args:
-        file_path: 挿入する画像ファイルのパス
-        article_id: 画像を挿入する記事のID（数値またはキー形式）
+        article_id: 画像を挿入する記事のキー（n... 形式）
+        image_file: Apps SDK file reference object。download_url/file_idを必須とします。
         caption: 画像のキャプション（オプション）
 
     Returns:
-        挿入結果のメッセージ
+        挿入結果、記事URL、note側画像URL、画像メタデータ
     """
     session = _session_manager.load()
     if session is None or session.is_expired():
-        return "セッションが無効です。note_loginでログインしてください。"
+        return {"ok": False, "error": "セッションが無効です。note_loginでログインしてください。"}
 
     try:
-        result = await insert_image_via_api(
-            session=session,
-            article_id=article_id,
-            file_path=file_path,
-            caption=caption,
-        )
-
-        # insert_image_via_api always returns {"success": True} on success
-        # or raises NoteAPIError on failure, so we can assume success here
-        caption_info = f"、キャプション: {result['caption']}" if result.get("caption") else ""
-        fallback_info = "（フォールバック使用）" if result.get("fallback_used") else ""
-        return (
-            f"画像を挿入しました。{fallback_info}\n"
-            f"記事ID: {result['article_id']}、キー: {result['article_key']}{caption_info}\n"
-            f"画像URL: {result['image_url']}"
-        )
+        return await insert_body_image_from_file_param(session, article_id, image_file, caption=caption)
     except NoteAPIError as e:
-        return f"エラー: {e}"
+        return {"ok": False, "error": {"code": e.code.value, "message": e.message}}
 
 
 @mcp.tool()
