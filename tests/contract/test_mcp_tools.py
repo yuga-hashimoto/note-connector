@@ -224,6 +224,40 @@ class TestToolSchemas:
             f"missing={expected_required - actual_required}"
         )
 
+    def test_note_set_eyecatch_image_file_tool_exists(self) -> None:
+        """Test that note_set_eyecatch_image_file tool is registered."""
+        tools = get_tools()
+        assert "note_set_eyecatch_image_file" in tools
+
+    def test_note_set_eyecatch_image_file_schema(self) -> None:
+        """Test note_set_eyecatch_image_file schema."""
+        tools = get_tools()
+        upload_tool = tools["note_set_eyecatch_image_file"]
+
+        assert upload_tool.parameters is not None
+        schema = upload_tool.parameters
+        assert "properties" in schema
+
+        expected_properties = {"note_id", "image_file"}
+        actual_properties = set(schema.get("properties", {}).keys())
+        assert actual_properties == expected_properties
+
+        expected_required = {"note_id", "image_file"}
+        actual_required = set(schema.get("required", []))
+        assert actual_required == expected_required
+        assert schema["properties"]["image_file"]["type"] == "object"
+
+    def test_note_set_eyecatch_image_file_meta(self) -> None:
+        """Test metadata for image file input."""
+        tools = get_tools()
+        upload_tool = tools["note_set_eyecatch_image_file"]
+
+        assert upload_tool.meta == {
+            "openai/fileParams": ["image_file"],
+            "openai/toolInvocation/invoking": "Uploading eyecatch image…",
+            "openai/toolInvocation/invoked": "Eyecatch image set",
+        }
+
     def test_note_upload_body_image_tool_exists(self) -> None:
         """Test that note_upload_body_image tool is registered."""
         tools = get_tools()

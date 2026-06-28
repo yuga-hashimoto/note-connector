@@ -7,7 +7,7 @@ Supports investigator mode for API investigation via INVESTIGATOR_MODE=1.
 from __future__ import annotations
 
 import os
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastmcp import FastMCP
 
@@ -23,11 +23,12 @@ from note_mcp.api.articles import (
     update_article,
 )
 from note_mcp.api.images import (
-    insert_image_via_api,
-    upload_body_image,
-    upload_eyecatch_chunked,
-    upload_eyecatch_image,
+ insert_image_via_api,
+ upload_body_image,
+ upload_eyecatch_chunked,
+ upload_eyecatch_image,
 )
+from note_mcp.api.openai_file_images import set_eyecatch_from_openai_file_param
 from note_mcp.api.preview import get_preview_html
 from note_mcp.auth.browser import login_with_browser
 from note_mcp.auth.session import SessionManager
@@ -345,6 +346,46 @@ async def note_set_eyecatch_base64_chunked(
     if image.url:
         return f"アイキャッチ画像を設定しました。URL: {image.url}"
     return "アイキャッチ画像を設定しました。"
+
+
+@mcp.tool(
+    meta={
+        "openai/fileParams": ["image_file"],
+        "openai/toolInvocation/invoking": "Uploading eyecatch image…",
+        "openai/toolInvocation/invoked": "Eyecatch image set",
+    }
+)
+async def note_set_eyecatch_image_file(
+    note_id: Annotated[str, "noteの記事ID、または n... 形式の記事キー"],
+    image_file: Annotated[
+        dict[str, Any],
+        (
+            'OpenAI Apps SDK file reference. Provided via _meta["openai/fileParams"]. '
+            "Contains download_url, file_id, mime_type, file_name."
+        ),
+    ],
+) -> dict[str, Any]:
+    """ChatGPT/Apps SDK file parameterの画像を記事アイキャッチに直接設定します。
+
+    ChatGPTで生成された画像、またはChatGPTにアップロードされた画像を、
+    file_pathやbase64を介さずApps SDKのfile parameterとして受け取り、
+    note.comへアップロードして指定記事のアイキャッチに設定します。
+
+    Args:
+        note_id: noteの記事ID、または n... 形式の記事キー
+        image_file: Apps SDK file reference object。download_url/file_idを必須とします。
+
+    Returns:
+        設定結果、記事URL、note側画像URL、画像メタデータ
+    """
+    session = _session_manager.load()
+    if session is None or session.is_expired():
+        return {"ok": False, "error": "セッションが無効です。note_loginでログインしてください。"}
+
+    try:
+        return await set_eyecatch_from_openai_file_param(session, note_id, image_file)
+    except NoteAPIError as e:
+        return {"ok": False, "error": {"code": e.code.value, "message": e.message}}
 
 
 @mcp.tool()
