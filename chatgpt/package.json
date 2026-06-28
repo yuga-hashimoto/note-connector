@@ -1,6 +1,6 @@
 {
   "name": "note-connector",
-  "version": "0.2.6",
+  "version": "0.2.14",
   "publishConfig": {
     "access": "public"
   },
