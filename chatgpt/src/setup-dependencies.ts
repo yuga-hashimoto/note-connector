@@ -1,6 +1,8 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { Readable } from "node:stream";
+import { finished } from "node:stream/promises";
 import { loadConfig, saveConfig, type NoteConnectorConfig } from "./config.js";
 import { configDir, resolveNoteConnectorRepo } from "./paths.js";
 
@@ -18,7 +20,11 @@ export interface SetupReport {
 
 function commandExists(cmd: string): boolean {
   try {
-    execFileSync("command", ["-v", cmd], { stdio: "ignore" });
+    if (process.platform === "win32") {
+      execFileSync("where.exe", [cmd], { stdio: "ignore" });
+    } else {
+      execFileSync("command", ["-v", cmd], { stdio: "ignore" });
+    }
     return true;
   } catch {
     return false;
@@ -41,14 +47,81 @@ function installUvUnix(): void {
   }
 }
 
-function ensureUv(): void {
+async function downloadUvZip(url: string, destPath: string): Promise<void> {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`Failed to download uv: ${response.statusText}`);
+  const fileStream = fs.createWriteStream(destPath);
+  await finished(Readable.fromWeb(response.body as any).pipe(fileStream));
+}
+
+async function installUvWin32(): Promise<void> {
+  console.log("Installing uv (Python toolchain) on Windows…");
+  const userProfile = process.env.USERPROFILE ?? "";
+  const localBin = path.join(userProfile, ".local", "bin");
+  fs.mkdirSync(localBin, { recursive: true });
+
+  const tempDir = path.join(process.env.TEMP ?? userProfile, `uv-install-${Date.now()}`);
+  fs.mkdirSync(tempDir, { recursive: true });
+
+  const zipUrl = "https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-pc-windows-msvc.zip";
+  const zipPath = path.join(tempDir, "uv.zip");
+
+  try {
+    console.log("Downloading uv zip archive...");
+    await downloadUvZip(zipUrl, zipPath);
+
+    console.log("Extracting uv zip archive...");
+    execFileSync("tar.exe", ["-xf", zipPath, "-C", tempDir], { stdio: "ignore" });
+
+    const findUvExe = (dir: string): string | null => {
+      const files = fs.readdirSync(dir);
+      for (const file of files) {
+        const fullPath = path.join(dir, file);
+        const stat = fs.statSync(fullPath);
+        if (stat.isDirectory()) {
+          const found = findUvExe(fullPath);
+          if (found) return found;
+        } else if (file.toLowerCase() === "uv.exe") {
+          return fullPath;
+        }
+      }
+      return null;
+    };
+
+    const uvExePath = findUvExe(tempDir);
+    if (!uvExePath) {
+      throw new Error("Could not find uv.exe in the extracted zip archive.");
+    }
+
+    const parentDir = path.dirname(uvExePath);
+    for (const file of fs.readdirSync(parentDir)) {
+      const src = path.join(parentDir, file);
+      const dest = path.join(localBin, file);
+      fs.copyFileSync(src, dest);
+    }
+    console.log(`uv successfully installed to ${localBin}`);
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+
+  const pathEnv = process.env.PATH ?? "";
+  if (!pathEnv.toLowerCase().includes(localBin.toLowerCase())) {
+    process.env.PATH = `${localBin};${pathEnv}`;
+  }
+}
+
+async function ensureUv(): Promise<void> {
   if (commandExists("uv")) return;
   if (process.platform === "win32") {
-    throw new Error("uv が見つかりません。https://docs.astral.sh/uv/ からインストールしてください。");
+    await installUvWin32();
+  } else {
+    installUvUnix();
   }
-  installUvUnix();
   if (!commandExists("uv")) {
-    throw new Error("uv のインストールに失敗しました。PATH に ~/.local/bin または ~/.cargo/bin を追加してください。");
+    const pathHint = process.platform === "win32"
+      ? "%USERPROFILE%\\.local\\bin"
+      : "~/.local/bin または ~/.cargo/bin";
+    throw new Error(`uv のインストールに失敗しました。PATH に ${pathHint} を追加してください。`);
   }
 }
 
@@ -174,7 +247,7 @@ export async function setupDependencies(): Promise<SetupReport> {
   ensureNodeVersion();
   const config = loadConfig();
 
-  ensureUv();
+  await ensureUv();
 
   const repo = ensureRepoPath(config);
   updateRepo(repo);

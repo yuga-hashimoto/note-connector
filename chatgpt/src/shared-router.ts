@@ -3,6 +3,7 @@ import http from "node:http";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import { resolveTailscaleBin, tailscaleEnv } from "./tunnel/tailscale.js";
 
@@ -83,7 +84,7 @@ export async function selectAvailableRouterPort(preferredPort: number): Promise<
 
 async function ensureRouterProcess(port: number): Promise<void> {
   if (await routerHealthy(port)) return;
-  const child = spawn(process.execPath, [new URL("./shared-router-daemon.js", import.meta.url).pathname], {
+  const child = spawn(process.execPath, [fileURLToPath(new URL("./shared-router-daemon.js", import.meta.url))], {
     detached: true,
     stdio: "ignore",
     env: { ...process.env, MCP_TAILSCALE_ROUTER_CONFIG: CONFIG_FILE },
